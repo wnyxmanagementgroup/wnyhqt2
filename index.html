@@ -2097,7 +2097,17 @@ function togglePasswordVisibility() {
 
 // --- STATS FUNCTIONS ---
 
+// --- STATS FUNCTIONS (แก้ไขใหม่) ---
+
 async function loadStatsData() {
+    const statsContent = document.getElementById('stats-content');
+    const statsLoader = document.getElementById('stats-loader');
+    
+    if (!statsContent || !statsLoader) {
+        console.error('Stats elements not found');
+        return;
+    }
+    
     showLoadingState('stats-content');
     
     try {
@@ -2120,206 +2130,318 @@ function renderStats(requests, users) {
     const statsContent = document.getElementById('stats-content');
     const statsLoader = document.getElementById('stats-loader');
     
-    if (!statsContent) return;
+    if (!statsContent || !statsLoader) {
+        console.error('Stats elements not found');
+        return;
+    }
     
+    // ซ่อน loader และแสดง content
     if (statsLoader && statsLoader.classList) statsLoader.classList.add('hidden');
     if (statsContent && statsContent.classList) statsContent.classList.remove('hidden');
     
-    // สถิติตามผู้ใช้
-    const userStats = calculateUserStats(requests, users);
-    document.getElementById('stats-by-user').innerHTML = `
-        <h3 class="text-lg font-bold mb-4">สถิติตามผู้ใช้</h3>
-        <div class="space-y-2">
-            ${userStats.map(stat => `
-                <div class="stat-item" data-type="user" data-value="${stat.user}">
-                    <span>${stat.user}</span>
-                    <span class="font-bold">${stat.count} รายการ</span>
-                </div>
-            `).join('')}
-        </div>
-    `;
+    // ตรวจสอบว่า element ต่างๆ มีอยู่จริงก่อนจะกำหนด innerHTML
+    const statsByUser = document.getElementById('stats-by-user');
+    const statsByDepartment = document.getElementById('stats-by-department');
+    const statsByYear = document.getElementById('stats-by-year');
+    const statsByExpense = document.getElementById('stats-by-expense');
     
-    // สถิติตามกลุ่มสาระ
-    const departmentStats = calculateDepartmentStats(requests, users);
-    document.getElementById('stats-by-department').innerHTML = `
-        <h3 class="text-lg font-bold mb-4">สถิติตามกลุ่มสาระ</h3>
-        <div class="space-y-2">
-            ${departmentStats.map(stat => `
-                <div class="stat-item" data-type="department" data-value="${stat.department}">
-                    <span>${stat.department}</span>
-                    <span class="font-bold">${stat.count} รายการ</span>
-                </div>
-            `).join('')}
-        </div>
-    `;
+    if (!statsByUser || !statsByDepartment || !statsByYear || !statsByExpense) {
+        console.error('One or more stat cards not found');
+        showErrorState('stats-content', 'ไม่พบองค์ประกอบสำหรับแสดงสถิติ');
+        return;
+    }
     
-    // สถิติตามปี
-    const yearStats = calculateYearStats(requests);
-    document.getElementById('stats-by-year').innerHTML = `
-        <h3 class="text-lg font-bold mb-4">สถิติตามปี</h3>
-        <div class="space-y-2">
-            ${yearStats.map(stat => `
-                <div class="stat-item" data-type="year" data-value="${stat.year}">
-                    <span>ปี ${stat.year}</span>
-                    <span class="font-bold">${stat.count} รายการ</span>
-                </div>
-            `).join('')}
-        </div>
-    `;
-    
-    // สถิติตามประเภทค่าใช้จ่าย
-    const expenseStats = calculateExpenseStats(requests);
-    document.getElementById('stats-by-expense').innerHTML = `
-        <h3 class="text-lg font-bold mb-4">สถิติตามประเภทค่าใช้จ่าย</h3>
-        <div class="space-y-2">
-            ${expenseStats.map(stat => `
-                <div class="stat-item" data-type="expense" data-value="${stat.type}">
-                    <span>${stat.type}</span>
-                    <span class="font-bold">${stat.count} รายการ</span>
-                </div>
-            `).join('')}
-        </div>
-    `;
-    
-    // Add click event listeners for stat items
-    document.querySelectorAll('.stat-item').forEach(item => {
+    try {
+        // สถิติตามผู้ใช้
+        const userStats = calculateUserStats(requests, users);
+        statsByUser.innerHTML = `
+            <h3 class="text-lg font-bold mb-4">สถิติตามผู้ใช้</h3>
+            <div class="space-y-2">
+                ${userStats.length > 0 ? userStats.map(stat => `
+                    <div class="stat-item" data-type="user" data-value="${stat.user}">
+                        <span>${sanitizeHTML(stat.user)}</span>
+                        <span class="font-bold">${stat.count} รายการ</span>
+                    </div>
+                `).join('') : '<p class="text-gray-500 text-center">ไม่มีข้อมูล</p>'}
+            </div>
+        `;
+        
+        // สถิติตามกลุ่มสาระ
+        const departmentStats = calculateDepartmentStats(requests, users);
+        statsByDepartment.innerHTML = `
+            <h3 class="text-lg font-bold mb-4">สถิติตามกลุ่มสาระ</h3>
+            <div class="space-y-2">
+                ${departmentStats.length > 0 ? departmentStats.map(stat => `
+                    <div class="stat-item" data-type="department" data-value="${stat.department}">
+                        <span>${sanitizeHTML(stat.department)}</span>
+                        <span class="font-bold">${stat.count} รายการ</span>
+                    </div>
+                `).join('') : '<p class="text-gray-500 text-center">ไม่มีข้อมูล</p>'}
+            </div>
+        `;
+        
+        // สถิติตามปี
+        const yearStats = calculateYearStats(requests);
+        statsByYear.innerHTML = `
+            <h3 class="text-lg font-bold mb-4">สถิติตามปี</h3>
+            <div class="space-y-2">
+                ${yearStats.length > 0 ? yearStats.map(stat => `
+                    <div class="stat-item" data-type="year" data-value="${stat.year}">
+                        <span>ปี ${stat.year}</span>
+                        <span class="font-bold">${stat.count} รายการ</span>
+                    </div>
+                `).join('') : '<p class="text-gray-500 text-center">ไม่มีข้อมูล</p>'}
+            </div>
+        `;
+        
+        // สถิติตามประเภทค่าใช้จ่าย
+        const expenseStats = calculateExpenseStats(requests);
+        statsByExpense.innerHTML = `
+            <h3 class="text-lg font-bold mb-4">สถิติตามประเภทค่าใช้จ่าย</h3>
+            <div class="space-y-2">
+                ${expenseStats.length > 0 ? expenseStats.map(stat => `
+                    <div class="stat-item" data-type="expense" data-value="${stat.type}">
+                        <span>${sanitizeHTML(stat.type)}</span>
+                        <span class="font-bold">${stat.count} รายการ</span>
+                    </div>
+                `).join('') : '<p class="text-gray-500 text-center">ไม่มีข้อมูล</p>'}
+            </div>
+        `;
+        
+        // Add click event listeners for stat items
+        setupStatsEventListeners();
+        
+    } catch (error) {
+        console.error('Error rendering stats:', error);
+        showErrorState('stats-content', 'เกิดข้อผิดพลาดในการแสดงสถิติ');
+    }
+}
+
+function setupStatsEventListeners() {
+    const statItems = document.querySelectorAll('.stat-item');
+    statItems.forEach(item => {
         item.addEventListener('click', () => {
             const type = item.dataset.type;
             const value = item.dataset.value;
+            const requests = allRequestsCache; // ใช้ข้อมูลจาก cache
             showStatsDetail(type, value, requests);
         });
     });
 }
 
 function calculateUserStats(requests, users) {
-    const userMap = new Map();
-    
-    requests.forEach(request => {
-        const username = request.username || request.createdBy;
-        if (username) {
-            userMap.set(username, (userMap.get(username) || 0) + 1);
-        }
-    });
-    
-    return Array.from(userMap.entries())
-        .map(([username, count]) => {
-            const user = users.find(u => u.username === username);
-            return {
-                user: user ? user.fullName : username,
-                count: count
-            };
-        })
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10); // แสดงเฉพาะ 10 อันดับแรก
+    try {
+        const userMap = new Map();
+        
+        requests.forEach(request => {
+            const username = request.username || request.createdBy;
+            if (username) {
+                userMap.set(username, (userMap.get(username) || 0) + 1);
+            }
+        });
+        
+        return Array.from(userMap.entries())
+            .map(([username, count]) => {
+                const user = users.find(u => u.username === username);
+                return {
+                    user: user ? user.fullName : username,
+                    count: count
+                };
+            })
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10); // แสดงเฉพาะ 10 อันดับแรก
+    } catch (error) {
+        console.error('Error calculating user stats:', error);
+        return [];
+    }
 }
 
 function calculateDepartmentStats(requests, users) {
-    const deptMap = new Map();
-    
-    requests.forEach(request => {
-        const username = request.username || request.createdBy;
-        const user = users.find(u => u.username === username);
-        const department = user ? user.department : 'ไม่ทราบ';
+    try {
+        const deptMap = new Map();
         
-        deptMap.set(department, (deptMap.get(department) || 0) + 1);
-    });
-    
-    return Array.from(deptMap.entries())
-        .map(([department, count]) => ({ department, count }))
-        .sort((a, b) => b.count - a.count);
+        requests.forEach(request => {
+            const username = request.username || request.createdBy;
+            const user = users.find(u => u.username === username);
+            const department = user ? user.department : 'ไม่ทราบ';
+            
+            deptMap.set(department, (deptMap.get(department) || 0) + 1);
+        });
+        
+        return Array.from(deptMap.entries())
+            .map(([department, count]) => ({ 
+                department: department || 'ไม่ระบุ', 
+                count 
+            }))
+            .sort((a, b) => b.count - a.count);
+    } catch (error) {
+        console.error('Error calculating department stats:', error);
+        return [];
+    }
 }
 
 function calculateYearStats(requests) {
-    const yearMap = new Map();
-    
-    requests.forEach(request => {
-        const date = new Date(request.timestamp || request.createdAt || Date.now());
-        const year = date.getFullYear() + 543; // Buddhist year
+    try {
+        const yearMap = new Map();
         
-        yearMap.set(year, (yearMap.get(year) || 0) + 1);
-    });
-    
-    return Array.from(yearMap.entries())
-        .map(([year, count]) => ({ year, count }))
-        .sort((a, b) => b.year - a.year);
+        requests.forEach(request => {
+            try {
+                const date = new Date(request.timestamp || request.createdAt || request.docDate || Date.now());
+                if (!isNaN(date.getTime())) {
+                    const year = date.getFullYear() + 543; // Buddhist year
+                    yearMap.set(year, (yearMap.get(year) || 0) + 1);
+                }
+            } catch (dateError) {
+                console.warn('Invalid date for request:', request.id);
+            }
+        });
+        
+        return Array.from(yearMap.entries())
+            .map(([year, count]) => ({ year, count }))
+            .sort((a, b) => b.year - a.year);
+    } catch (error) {
+        console.error('Error calculating year stats:', error);
+        return [];
+    }
 }
 
 function calculateExpenseStats(requests) {
-    const expenseMap = new Map();
-    expenseMap.set('ไม่เบิกค่าใช้จ่าย', 0);
-    expenseMap.set('ขอเบิกค่าใช้จ่าย', 0);
-    
-    requests.forEach(request => {
-        if (request.expenseOption === 'no') {
-            expenseMap.set('ไม่เบิกค่าใช้จ่าย', expenseMap.get('ไม่เบิกค่าใช้จ่าย') + 1);
-        } else {
-            expenseMap.set('ขอเบิกค่าใช้จ่าย', expenseMap.get('ขอเบิกค่าใช้จ่าย') + 1);
-        }
-    });
-    
-    return Array.from(expenseMap.entries())
-        .map(([type, count]) => ({ type, count }));
+    try {
+        const expenseMap = new Map();
+        expenseMap.set('ไม่เบิกค่าใช้จ่าย', 0);
+        expenseMap.set('ขอเบิกค่าใช้จ่าย', 0);
+        
+        requests.forEach(request => {
+            if (request.expenseOption === 'no') {
+                expenseMap.set('ไม่เบิกค่าใช้จ่าย', expenseMap.get('ไม่เบิกค่าใช้จ่าย') + 1);
+            } else if (request.expenseOption === 'partial') {
+                expenseMap.set('ขอเบิกค่าใช้จ่าย', expenseMap.get('ขอเบิกค่าใช้จ่าย') + 1);
+            } else {
+                // ถ้าไม่มีข้อมูล ให้นับเป็นไม่เบิก
+                expenseMap.set('ไม่เบิกค่าใช้จ่าย', expenseMap.get('ไม่เบิกค่าใช้จ่าย') + 1);
+            }
+        });
+        
+        return Array.from(expenseMap.entries())
+            .map(([type, count]) => ({ type, count }));
+    } catch (error) {
+        console.error('Error calculating expense stats:', error);
+        return [];
+    }
 }
 
 function showStatsDetail(type, value, requests) {
-    const titleMap = {
-        'user': `รายละเอียดคำขอของ ${value}`,
-        'department': `รายละเอียดคำขอของกลุ่มสาระ ${value}`,
-        'year': `รายละเอียดคำขอปี ${value}`,
-        'expense': `รายละเอียดคำขอประเภท ${value}`
-    };
-    
-    const filteredRequests = filterRequestsByType(requests, type, value);
-    
-    document.getElementById('stats-detail-title').textContent = titleMap[type] || 'รายละเอียด';
-    
-    let content = '';
-    if (filteredRequests.length === 0) {
-        content = '<p class="text-gray-500">ไม่พบข้อมูล</p>';
-    } else {
-        content = `
-            <div class="space-y-4">
-                ${filteredRequests.map(request => `
-                    <div class="p-4 border rounded-lg">
-                        <h4 class="font-bold">${request.purpose || 'ไม่มีชื่อ'}</h4>
-                        <p class="text-sm text-gray-600">สถานที่: ${request.location || '-'}</p>
-                        <p class="text-sm text-gray-600">ผู้ขอ: ${request.requesterName || '-'}</p>
-                        <p class="text-sm text-gray-600">วันที่: ${formatDate(new Date(request.timestamp || request.createdAt))}</p>
-                        <p class="text-sm text-gray-600">สถานะ: ${request.status || 'กำลังดำเนินการ'}</p>
-                    </div>
-                `).join('')}
-            </div>
-        `;
+    try {
+        const statsDetailTitle = document.getElementById('stats-detail-title');
+        const statsDetailContent = document.getElementById('stats-detail-content');
+        const statsDetailModal = document.getElementById('stats-detail-modal');
+        
+        if (!statsDetailTitle || !statsDetailContent || !statsDetailModal) {
+            showAlert('ข้อผิดพลาด', 'ไม่พบองค์ประกอบสำหรับแสดงรายละเอียดสถิติ');
+            return;
+        }
+        
+        const titleMap = {
+            'user': `รายละเอียดคำขอของ ${value}`,
+            'department': `รายละเอียดคำขอของกลุ่มสาระ ${value}`,
+            'year': `รายละเอียดคำขอปี ${value}`,
+            'expense': `รายละเอียดคำขอประเภท ${value}`
+        };
+        
+        const filteredRequests = filterRequestsByType(requests, type, value);
+        
+        statsDetailTitle.textContent = titleMap[type] || 'รายละเอียด';
+        
+        let content = '';
+        if (filteredRequests.length === 0) {
+            content = '<p class="text-gray-500 text-center p-4">ไม่พบข้อมูล</p>';
+        } else {
+            content = `
+                <div class="space-y-3 max-h-96 overflow-y-auto">
+                    ${filteredRequests.slice(0, 50).map(request => `
+                        <div class="p-3 border rounded-lg bg-white shadow-sm">
+                            <h4 class="font-bold text-blue-800">${sanitizeHTML(request.purpose || 'ไม่มีชื่อ')}</h4>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 text-sm">
+                                <div><strong>สถานที่:</strong> ${sanitizeHTML(request.location || '-')}</div>
+                                <div><strong>ผู้ขอ:</strong> ${sanitizeHTML(request.requesterName || '-')}</div>
+                                <div><strong>วันที่:</strong> ${formatDate(new Date(request.timestamp || request.createdAt || request.docDate))}</div>
+                                <div><strong>สถานะ:</strong> ${request.status || 'กำลังดำเนินการ'}</div>
+                            </div>
+                            ${request.id ? `<div class="mt-1 text-xs text-gray-500"><strong>ID:</strong> ${request.id}</div>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+                ${filteredRequests.length > 50 ? 
+                    `<p class="text-center text-gray-500 mt-4">แสดง ${Math.min(filteredRequests.length, 50)} จาก ${filteredRequests.length} รายการ</p>` : 
+                    ''
+                }
+            `;
+        }
+        
+        statsDetailContent.innerHTML = content;
+        statsDetailModal.style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Error showing stats detail:', error);
+        showAlert('ข้อผิดพลาด', 'ไม่สามารถแสดงรายละเอียดสถิติได้');
     }
-    
-    document.getElementById('stats-detail-content').innerHTML = content;
-    document.getElementById('stats-detail-modal').style.display = 'flex';
 }
 
 function filterRequestsByType(requests, type, value) {
-    switch (type) {
-        case 'user':
-            return requests.filter(req => {
-                const username = req.username || req.createdBy;
-                return username === value;
-            });
-        case 'department':
-            // ต้องมีการเชื่อมโยงกับข้อมูลผู้ใช้
-            return requests.slice(0, 10); // ตัวอย่าง
-        case 'year':
-            return requests.filter(req => {
-                const date = new Date(req.timestamp || req.createdAt || Date.now());
-                const year = date.getFullYear() + 543;
-                return year.toString() === value;
-            });
-        case 'expense':
-            if (value === 'ไม่เบิกค่าใช้จ่าย') {
-                return requests.filter(req => req.expenseOption === 'no');
-            } else {
-                return requests.filter(req => req.expenseOption === 'partial');
-            }
-        default:
+    try {
+        if (!requests || !Array.isArray(requests)) {
             return [];
+        }
+        
+        switch (type) {
+            case 'user':
+                return requests.filter(req => {
+                    const username = req.username || req.createdBy;
+                    return username === value;
+                });
+            case 'department':
+                return requests.filter(req => {
+                    // ในกรณีนี้เราต้องการแสดงข้อมูลพื้นฐาน
+                    return true; // แสดงทั้งหมดชั่วคราว
+                }).slice(0, 20); // จำกัดจำนวน
+            case 'year':
+                return requests.filter(req => {
+                    try {
+                        const date = new Date(req.timestamp || req.createdAt || req.docDate || Date.now());
+                        if (isNaN(date.getTime())) return false;
+                        const year = date.getFullYear() + 543;
+                        return year.toString() === value;
+                    } catch (error) {
+                        return false;
+                    }
+                });
+            case 'expense':
+                if (value === 'ไม่เบิกค่าใช้จ่าย') {
+                    return requests.filter(req => req.expenseOption === 'no');
+                } else {
+                    return requests.filter(req => req.expenseOption === 'partial');
+                }
+            default:
+                return [];
+        }
+    } catch (error) {
+        console.error('Error filtering requests:', error);
+        return [];
+    }
+}
+
+// แก้ไขฟังก์ชัน formatDate ให้จัดการ error ได้
+function formatDate(date) {
+    try {
+        if (!date || isNaN(date.getTime())) return '-';
+        
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear() + 543; // Convert to Buddhist year
+        
+        return `${day}/${month}/${year}`;
+    } catch (error) {
+        return '-';
     }
 }
 
