@@ -298,7 +298,6 @@
         </footer>
     </div>
 
-    <!-- Modals -->
     <div id="register-modal" class="modal">
         <div class="modal-content">
             <h3 class="text-xl font-bold mb-4">สมัครใช้งานใหม่</h3>
@@ -725,10 +724,24 @@ function toggleLoader(buttonId, show) {
     }
 }
 
+// =======================================================
+// === 🛠️ START: แก้ไขจุดที่ 1 (ทำให้ getCurrentUser ปลอดภัย) ===
+// =======================================================
 function getCurrentUser() {
     const userJson = sessionStorage.getItem('currentUser');
-    return userJson ? JSON.parse(userJson) : null;
+    if (!userJson) return null; // ถ้าไม่มีข้อมูล ก็ return null
+    
+    try {
+        return JSON.parse(userJson); // พยายาม parse
+    } catch (e) {
+        console.error("Failed to parse user from sessionStorage:", e);
+        sessionStorage.removeItem('currentUser'); // ล้างข้อมูลที่เสียหายทิ้ง
+        return null; // คืนค่า null
+    }
 }
+// =======================================================
+// === 🛠️ END: แก้ไขจุดที่ 1 ===============================
+// =======================================================
 
 function fileToObject(file) {
     return new Promise((resolve, reject) => {
@@ -1058,13 +1071,16 @@ async function handleRegister(e) {
 // --- DATA FETCHING & RENDERING (USER) ---
 
 async function fetchUserRequests() {
-    const user = getCurrentUser();
-    if (!user) return;
-    
     showLoadingState('requests-container');
     document.getElementById('no-requests-message').classList.add('hidden');
 
     try {
+        const user = getCurrentUser(); // <-- ย้ายมาไว้ข้างใน try
+        if (!user) {
+             showErrorState('requests-container', 'ไม่พบข้อมูลผู้ใช้ กรุณาเข้าสู่ระบบใหม่');
+             return; 
+        }
+
         if (cacheManager.isValid('requests')) {
             allRequestsCache = cacheManager.requests.data;
             userMemosCache = cacheManager.memos.data;
@@ -1073,7 +1089,15 @@ async function fetchUserRequests() {
                 apiCallWithRetry('GET', 'getUserRequests', { username: user.username }),
                 apiCallWithRetry('GET', 'getSentMemos', { username: user.username })
             ]);
-            allRequestsCache = requestsResult.data.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)) || [];
+            
+            // =======================================================
+            // === 🛠️ START: แก้ไขจุดที่ 2 (ป้องกัน null.sort) ===========
+            // =======================================================
+            allRequestsCache = (requestsResult.data || []).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            // =======================================================
+            // === 🛠️ END: แก้ไขจุดที่ 2 ===============================
+            // =======================================================
+            
             userMemosCache = memosResult.data || [];
             
             cacheManager.set('requests', allRequestsCache);
@@ -1090,6 +1114,7 @@ async function fetchUserRequests() {
         showErrorState('requests-container', 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
     }
 }
+
 
 function renderRequestsList(requests, memos = [], searchTerm = '') {
     const listContainer = document.getElementById('requests-list');
