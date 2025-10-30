@@ -1626,14 +1626,24 @@ async function deleteRequest(requestId) {
 
 // --- ฟังก์ชันพื้นฐานอื่นๆ ---
 
-async function fetchAllUsers() {
-    showLoadingState('admin-users-list');
+async function fetchAllMemos() {
+    showLoadingState('admin-memos-list'); // ใช้ ID ของ container ที่ถูกต้อง
+    const loader = document.getElementById('admin-memos-loader');
+    if (loader) loader.classList.add('hidden');
+
     try {
-        const result = await apiCallWithRetry('GET', 'getAllUsers');
-        allUsersCache = result.data || [];
-        renderUsersList(allUsersCache);
+        if (cacheManager.isValid('memos')) {
+            allMemosCache = cacheManager.memos.data;
+        } else {
+            const result = await apiCallWithRetry('GET', 'getAllMemos');
+            allMemosCache = result.data || [];
+            cacheManager.set('memos', allMemosCache);
+        }
+        
+        renderAdminMemosList(allMemosCache);
     } catch (error) {
-        showErrorState('admin-users-list', 'เกิดข้อผิดพลาดในการโหลดข้อมูลผู้ใช้');
+        console.error("Error fetching all memos:", error);
+        showErrorState('admin-memos-list', 'เกิดข้อผิดพลาดในการโหลดข้อมูลบันทึกข้อความ');
     }
 }
 
@@ -1756,6 +1766,87 @@ async function fetchAllMemos() {
     console.log('Fetching all memos...');
 }
 
+// --- เพิ่มฟังก์ชันใหม่นี้เข้าไป ---
+function renderAdminMemosList(memos) {
+    const listContainer = document.getElementById('admin-memos-list');
+    const noDataMsg = document.getElementById('no-admin-memos-message');
+
+    if (memos.length === 0) {
+        listContainer.classList.add('hidden');
+        noDataMsg.classList.remove('hidden');
+        return;
+    }
+
+    listContainer.classList.remove('hidden');
+    noDataMsg.classList.add('hidden');
+
+    const sortedMemos = memos.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    let html = `
+        <table class="min-w-full bg-white">
+            <thead>
+                <tr class="bg-gray-100">
+                    <th class="py-2 px-4 border text-left">Ref ID</th>
+                    <th class="py-2 px-4 border text-left">ผู้ส่ง</th>
+                    <th class="py-2 px-4 border text-left">สถานะ</th>
+                    <th class="py-2 px-4 border text-left">ไฟล์แนบ</th>
+                    <th class="py-2 px-4 border text-left">การดำเนินการ</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    sortedMemos.forEach(memo => {
+        const isCompleted = memo.status === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน';
+        let filesHTML = '';
+        
+        if (memo.fileURL) {
+            filesHTML += `<a href="${memo.fileURL}" target="_blank" class="text-blue-600 text-sm">ไฟล์บันทึก (ร่าง)</a><br>`;
+        }
+        if (memo.completedMemoUrl) {
+            filesHTML += `<a href="${memo.completedMemoUrl}" target="_blank" class="text-green-600 text-sm">ไฟล์บันทึก (สมบูรณ์)</a><br>`;
+        }
+        if (memo.completedCommandUrl) {
+            filesHTML += `<a href="${memo.completedCommandUrl}" target="_blank" class="text-green-600 text-sm">ไฟล์คำสั่ง (สมบูรณ์)</a><br>`;
+        }
+        if (memo.dispatchBookUrl) {
+            filesHTML += `<a href="${memo.dispatchBookUrl}" target="_blank" class="text-purple-600 text-sm">หนังสือส่ง</a><br>`;
+        }
+
+        html += `
+            <tr class="hover:bg-gray-50">
+                <td class="py-2 px-4 border">${sanitizeHTML(memo.refNumber)}</td>
+                <td class="py-2 px-4 border">${sanitizeHTML(memo.submittedBy)}</td>
+                <td class="py-2 px-4 border">
+                    <span class="px-2 py-1 rounded-full text-xs ${
+                        isCompleted ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                    }">${translateStatus(memo.status)}</span>
+                </td>
+                <td class="py-2 px-4 border">${filesHTML || 'N/A'}</td>
+                <td class="py-2 px-4 border">
+                    ${!isCompleted ? 
+                        `<button class="btn btn-sm btn-primary admin-memo-action" data-id="${memo.id}">จัดการไฟล์</button>` : 
+                        '<span class="text-green-700 font-semibold text-sm">เสร็จสิ้น</span>'
+                    }
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table>`;
+    listContainer.innerHTML = html;
+
+    // Add event listeners for action buttons
+    listContainer.querySelectorAll('.admin-memo-action').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const memoId = e.target.dataset.id;
+            document.getElementById('action-memo-id').value = memoId;
+            document.getElementById('admin-memo-action-modal').style.display = 'flex';
+        });
+    });
+}
+// --- จบฟังก์ชันใหม่ ---
+     
 async function loadStatsData() {
     // Implementation for loading stats data
     console.log('Loading stats data...');
@@ -1788,10 +1879,46 @@ function handleMemoSubmitFromModal(e) {
     console.log('Submitting memo from modal...');
 }
 
-function handleAdminMemoActionSubmit(e) {
-    // Implementation for admin memo action submit
+async function handleAdminMemoActionSubmit(e) {
     e.preventDefault();
-    console.log('Submitting admin memo action...');
+    toggleLoader('admin-memo-action-submit-button', true);
+
+    const memoId = document.getElementById('action-memo-id').value;
+    const memoFile = document.getElementById('completed-memo-file').files[0];
+    const commandFile = document.getElementById('completed-command-file').files[0];
+    const dispatchFile = document.getElementById('dispatch-book-file').files[0];
+
+    if (!memoFile && !commandFile) {
+        showAlert('ข้อมูลไม่ครบ', 'กรุณาอัปโหลดไฟล์บันทึกข้อความหรือไฟล์คำสั่ง (ฉบับสมบูรณ์) อย่างน้อย 1 ไฟล์');
+        toggleLoader('admin-memo-action-submit-button', false);
+        return;
+    }
+
+    try {
+        const payload = {
+            id: memoId,
+            status: 'เสร็จสิ้น/รับไฟล์ไปใช้งาน',
+            completedMemoFile: memoFile ? await fileToObject(memoFile) : null,
+            completedCommandFile: commandFile ? await fileToObject(commandFile) : null,
+            dispatchBookFile: dispatchFile ? await fileToObject(dispatchFile) : null
+        };
+
+        const result = await apiCallWithRetry('POST', 'updateMemoStatus', payload);
+        
+        showAlert('สำเร็จ', result.message);
+        document.getElementById('admin-memo-action-modal').style.display = 'none';
+        document.getElementById('admin-memo-action-form').reset();
+        
+        // Clear cache and refresh
+        cacheManager.clear('memos');
+        await fetchAllMemos(); // Refresh the admin memo list
+        cacheManager.clear('requests'); // Also clear requests for user dashboard
+
+    } catch (error) {
+        showAlert('เกิดข้อผิดพลาด', error.message);
+    } finally {
+        toggleLoader('admin-memo-action-submit-button', false);
+    }
 }
 
 function handleDispatchFormSubmit(e) {
