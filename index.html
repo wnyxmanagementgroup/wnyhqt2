@@ -41,6 +41,38 @@
         .chart-legend { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; justify-content: center; }
         .legend-item { display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; cursor: pointer; }
         .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+        /* เพิ่มกฎเหล่านี้ในส่วน style */
+#login-screen {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+#main-app {
+    display: none;
+}
+
+/* ตรวจสอบให้แน่ใจว่า modal พื้นฐานแสดงได้ */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 90%;
+    max-width: 500px;
+    border-radius: 8px;
+}
     </style>
 </head>
 <body class="p-4 sm:p-8">
@@ -366,16 +398,58 @@
 
         // --- MAIN APP LOGIC ---
 
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('App Initializing with Google Sheets Backend...');
-            setupEventListeners();
-            const user = getCurrentUser();
-            if (user) {
-                initializeUserSession(user);
-            } else {
-                showLoginScreen();
-            }
-        });
+        // แก้ไขในส่วน DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('App Initializing...');
+    
+    // ตรวจสอบ session storage
+    const user = getCurrentUser();
+    
+    // แสดง login screen ก่อนเสมอ
+    showLoginScreen();
+    
+    // ถ้ามีผู้ใช้ล็อกอินอยู่แล้ว
+    if (user) {
+        initializeUserSession(user);
+    }
+    
+    setupEventListeners();
+});
+
+// แก้ไขฟังก์ชัน showLoginScreen
+function showLoginScreen() {
+    const loginScreen = document.getElementById('login-screen');
+    const mainApp = document.getElementById('main-app');
+    
+    if (loginScreen) {
+        loginScreen.style.display = 'block';
+        loginScreen.classList.remove('hidden');
+    }
+    
+    if (mainApp) {
+        mainApp.style.display = 'none';
+        mainApp.classList.add('hidden');
+    }
+    
+    // ลบผู้ใช้จาก session
+    sessionStorage.removeItem('currentUser');
+}
+
+// แก้ไขฟังก์ชัน showMainApp
+function showMainApp() {
+    const loginScreen = document.getElementById('login-screen');
+    const mainApp = document.getElementById('main-app');
+    
+    if (loginScreen) {
+        loginScreen.style.display = 'none';
+        loginScreen.classList.add('hidden');
+    }
+    
+    if (mainApp) {
+        mainApp.style.display = 'block';
+        mainApp.classList.remove('hidden');
+    }
+}
 
         // --- INITIALIZATION ---
         
