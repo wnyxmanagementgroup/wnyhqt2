@@ -1642,25 +1642,89 @@
 
         // --- AUTHENTICATION HANDLERS ---
         
-        async function handleLogin(e) {
-            e.preventDefault();
-            const username = document.getElementById('username').value.trim();
-            const password = document.getElementById('password').value;
-            const errorP = document.getElementById('login-error');
-            errorP.classList.add('hidden');
-            toggleLoader('login-button', true);
+        // --- AUTHENTICATION HANDLERS ---
+async function handleLogin(e) {
+  e.preventDefault();
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const errorP = document.getElementById('login-error');
+  
+  errorP.classList.add('hidden');
+  
+  // Validation
+  if (!username || !password) {
+    errorP.textContent = "กรุณากรอกชื่อผู้ใช้และรหัสผ่าน";
+    errorP.classList.remove('hidden');
+    return;
+  }
+  
+  toggleLoader('login-button', true);
 
-            try {
-                const result = await apiCall('POST', 'verifyCredentials', { username, password });
-                sessionStorage.setItem('currentUser', JSON.stringify(result.user));
-                initializeUserSession(result.user);
-            } catch (error) {
-                errorP.textContent = error.message;
-                errorP.classList.remove('hidden');
-            } finally {
-                toggleLoader('login-button', false);
-            }
-        }
+  try {
+    console.log('Sending login request for:', username);
+    const result = await apiCall('POST', 'verifyCredentials', { username, password });
+    
+    if (result.status === 'success') {
+      console.log('Login successful, user:', result.user);
+      sessionStorage.setItem('currentUser', JSON.stringify(result.user));
+      initializeUserSession(result.user);
+    } else {
+      throw new Error(result.message || 'การเข้าสู่ระบบล้มเหลว');
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    errorP.textContent = error.message;
+    errorP.classList.remove('hidden');
+  } finally {
+    toggleLoader('login-button', false);
+  }
+}
+
+// แก้ไขฟังก์ชัน apiCall เพื่อ debug
+async function apiCall(method, action, payload = {}) {
+  let url = SCRIPT_URL;
+  const options = {
+    method: method,
+    redirect: 'follow',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8', },
+  };
+
+  console.log(`API Call: ${method} ${action}`, payload);
+
+  if (method === 'GET') {
+    const params = new URLSearchParams({ action, ...payload, cacheBust: new Date().getTime() }); 
+    url += `?${params}`;
+  } else {
+    options.body = JSON.stringify({ action, payload });
+  }
+
+  try {
+    const response = await fetch(url, options);
+    console.log('Response status:', response.status);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    console.log('API Response:', result);
+    
+    if (result.status === 'error') {
+      throw new Error(result.message);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('API Call Error:', error);
+    
+    if (error.message.includes('Failed to fetch')) {
+      showAlert('การเชื่อมต่อล้มเหลว', 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ได้ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและ URL ของสคริปต์');
+    } else {
+      showAlert('เกิดข้อผิดพลาด', error.message);
+    }
+    throw error;
+  }
+}
 
         async function handleRegister(e) {
             e.preventDefault();
