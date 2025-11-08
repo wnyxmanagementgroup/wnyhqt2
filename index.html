@@ -4455,5 +4455,68 @@ async function handleTemplateSettingsSubmit() {
 }
 </script>
 
+
+<!-- ✅ Modal: เพิ่มหัวหน้ากลุ่มสาระ -->
+<div id="add-department-head-modal" class="modal hidden fixed inset-0 bg-black bg-opacity-50 justify-center items-center z-50">
+  <div class="bg-white rounded-xl shadow-lg p-6 w-96">
+    <h2 class="text-lg font-bold mb-4 text-gray-800">เพิ่มหัวหน้ากลุ่มสาระ</h2>
+    <input type="text" id="new-head-department" placeholder="ชื่อกลุ่มสาระ" class="w-full border rounded p-2 mb-3" />
+    <input type="text" id="new-head-name" placeholder="ชื่อหัวหน้ากลุ่มสาระ" class="w-full border rounded p-2 mb-4" />
+    <div class="flex justify-end gap-3">
+      <button class="bg-blue-600 text-white px-4 py-2 rounded" onclick="saveDepartmentHead()">บันทึก</button>
+      <button class="bg-gray-400 text-white px-4 py-2 rounded" onclick="closeAddDepartmentHeadModal()">ยกเลิก</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ✅ ฟังก์ชันเปิด/ปิด modal
+function openAddDepartmentHeadModal() {
+  const modal = document.getElementById('add-department-head-modal');
+  if (modal) modal.classList.remove('hidden');
+  else showAlert('ผิดพลาด', 'ไม่พบ modal สำหรับเพิ่มหัวหน้ากลุ่มสาระ');
+}
+
+function closeAddDepartmentHeadModal() {
+  const modal = document.getElementById('add-department-head-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+// ✅ ฟังก์ชันบันทึกข้อมูลหัวหน้ากลุ่มสาระ
+async function saveDepartmentHead() {
+  const department = document.getElementById('new-head-department').value.trim();
+  const headName = document.getElementById('new-head-name').value.trim();
+
+  if (!department || !headName) {
+    showAlert('กรุณากรอกข้อมูลให้ครบ', 'โปรดระบุชื่อกลุ่มสาระและหัวหน้า');
+    return;
+  }
+
+  try {
+    showAlert('กำลังบันทึก...', 'โปรดรอสักครู่');
+
+    const response = await fetch(`${API_BASE_URL}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'saveDepartmentHeads',
+        payload: { Department: department, HeadName: headName }
+      })
+    });
+
+    const result = await response.json();
+    if (result.status === 'success') {
+      showAlert('สำเร็จ', 'บันทึกข้อมูลหัวหน้ากลุ่มสาระเรียบร้อยแล้ว');
+      closeAddDepartmentHeadModal();
+    } else {
+      showAlert('ผิดพลาด', result.message || 'ไม่สามารถบันทึกได้');
+    }
+  } catch (err) {
+    console.error('Error saving department head:', err);
+    showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดระหว่างการบันทึกข้อมูล');
+  }
+}
+</script>
+
 </body>
 </html>
