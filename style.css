@@ -1,0 +1,248 @@
+   /* --- [ ADD-ON ] Glassmorphism Header --- */
+div#main-app > header {
+    background-color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+}
+        body { 
+            font-family: 'Sarabun', sans-serif; 
+            /* Change: ย้ายสีพื้นหลังไปที่ class ของ body ใน HTML แล้ว */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Change: ปรับปรุงสไตล์ Glassmorphism หลัก */
+        .main-container { 
+            background-color: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px) saturate(180%);
+            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1); /* Change: เพิ่มเงาที่ดูนุ่มนวลขึ้น */
+        }
+
+        /* Change: ทำให้ InputField โปร่งแสงเล็กน้อย */
+        .form-input { 
+            width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.5rem; 
+            transition: all 0.15s ease-in-out; 
+            background-color: rgba(255, 255, 255, 0.6); /* Glassy input */
+        }
+        .form-input:focus { 
+            outline: none; border-color: #4f46e5; 
+            box-shadow: 0 0 0 2px #c7d2fe; 
+            background-color: rgba(255, 255, 255, 0.8); /* สว่างขึ้นเมื่อ focus */
+        }
+        .form-input::placeholder { color: #6b7280; } /* Tailwind gray-500 */
+
+        .form-label { font-weight: bold; color: #374151; }
+        .loader { border: 4px solid #f3f3f3; border-radius: 50%; border-top: 4px solid #3b82f6; width: 24px; height: 24px; animation: spin 2s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        fieldset { border-color: #e5e7eb; }
+        
+        /* Change: ทำให้ Legend ดูทันสมัยขึ้น (ไม่มีพื้นหลังทึบ) */
+        legend { 
+            background-color: transparent; 
+            padding: 0 0.5rem; 
+            border-radius: 9999px; 
+            font-weight: 700; 
+            color: #4f46e5; 
+            font-size: 1.25rem; /* ทำให้เด่นขึ้น */
+            margin-left: 0.5rem;
+        }
+
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; font-weight: bold; padding: 0.6rem 1.25rem; border-radius: 0.5rem; transition: all 0.2s ease-in-out; cursor: pointer; border: none; box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1); }
+        .btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
+        .btn-primary { background-color: #4f46e5; color: white; }
+        .btn-primary:hover { background-color: #4338ca; } /* Add: เพิ่ม hover state */
+        .btn-danger { background-color: #ef4444; color: white; }
+        .btn-danger:hover { background-color: #dc2626; } /* Add: เพิ่ม hover state */
+        .btn-success { background-color: #10b981; color: white; }
+        .btn-success:hover { background-color: #059669; } /* Add: เพิ่ม hover state */
+        .btn-warning { background-color: #f59e0b; color: white; }
+        .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.875rem; }
+
+        .modal { display: none; position: fixed; z-index: 50; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        /* Change: ทำให้ Modal เป็น Glassmorphism ด้วย */
+        .modal-content { 
+            background-color: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            margin: auto; padding: 20px; border: 1px solid rgba(255, 255, 255, 0.5); 
+            width: 90%; max-width: 800px; border-radius: 0.75rem;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+        }
+
+        /* Change: ใช้ Glassmorphism กับปุ่มเมนู */
+        .nav-button {
+            padding: 1rem;
+            text-align: center;
+            border-radius: 0.75rem; /* rounded-xl */
+            transition: all 0.2s ease-in-out;
+            background-color: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05);
+        }
+        .nav-button:hover {
+            background-color: rgba(255, 255, 255, 0.9);
+            transform: translateY(-3px); /* Add: เพิ่มมิติการลอย */
+            box-shadow: 0 8px 20px 0 rgba(0, 0, 0, 0.1);
+        }
+        .nav-button.active { 
+            background-color: rgba(224, 231, 255, 0.9); /* User's 'bg-e0e7ff' but glassy */
+            border: 2px solid #4f46e5;
+            box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.15); /* Add: 'Glow' effect */
+        }
+        /* Add: ต้องกำหนดสี text ใหม่ เพราะ .active ไม่มีสีขาว */
+        .nav-button.active h3 { color: #4f46e5; }
+        .nav-button:not(.active) h3 { color: #374151; }
+
+        /* Change: ใช้ Glassmorphism กับการ์ดสถิติ */
+        .stat-card { 
+            background-color: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 0.75rem; 
+            padding: 1.5rem; 
+            box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05);
+        }
+        .stat-card h3 { font-size: 1.25rem; font-weight: 700; color: #111827; }
+        .stat-item { display: flex; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid rgba(243, 244, 246, 0.6); cursor: pointer; transition: background-color 0.2s; }
+        .stat-item:hover { background-color: rgba(239, 246, 255, 0.7); }
+        .stat-item:last-child { border-bottom: none; }
+        
+        .tab-button { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 600; transition: all 0.2s; }
+        .tab-button.active { background-color: #4f46e5; color: white; }
+        .tab-button:not(.active) { background-color: rgba(224, 231, 255, 0.7); color: #4f46e5; }
+        /* --- [ ADD-ON ] Glassmorphism Charts --- */
+       .chart-container {
+    position: relative;
+    background-color: rgba(255, 255, 255, 0.8) !important;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05) !important;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    min-height: 300px;
+}
+        /* Change: ใช้ Glassmorphism กับกล่องข้อมูลหน้าแรก */
+        .info-section { 
+            margin-top: 1.5rem; 
+            border: 1px solid rgba(255, 255, 255, 0.3); 
+            border-radius: 0.75rem; 
+            padding: 1.5rem; 
+            background-color: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05);
+        }
+        .info-section h3 { font-size: 1.25rem; font-weight: 700; color: #111827; margin-bottom: 1rem; }
+        .info-section ul { list-style-type: disc; margin-left: 1.5rem; }
+        .info-section li { margin-bottom: 0.5rem; }
+        .info-note { background-color: #fef3cd; border-left: 4px solid #f59e0b; padding: 0.75rem; margin-top: 1rem; border-radius: 0.375rem; }
+        
+        .page-view { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* --- [ ADD-ON ] Glassmorphism Cards & Tables --- */
+
+        /* 1. Dashboard: รายการคำขอ (Request List Items) */
+        /* ใช้ !important เพื่อ override 'bg-white' ที่มาจาก JavaScript */
+        div#requests-list > div {
+            background-color: rgba(255, 255, 255, 0.8) !important; 
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05);
+            transition: all 0.2s ease-in-out;
+        }
+
+        /* เพิ่มเอฟเฟกต์ตอน hover */
+        div#requests-list > div:hover {
+            background-color: rgba(255, 255, 255, 0.95) !important;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px 0 rgba(0, 0, 0, 0.07);
+        }
+.chart-container canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
+/* ปรับปรุงการแสดงผลกราฟบนมือถือ */
+@media (max-width: 768px) {
+    .chart-container canvas {
+        height: 250px !important;
+    }
+}
+
+/* ทำให้กราฟ responsive */
+.chart-container {
+    position: relative;
+    min-height: 300px;
+}
+        /* 2. Stats Page: การ์ดสรุปผล (Summary Cards) */
+        /* ใช้ !important เพื่อ override 'bg-white' และ 'shadow' ที่มาจาก JavaScript */
+        div#stats-overview div[class*="bg-white"] {
+            background-color: rgba(255, 255, 255, 0.8) !important; 
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05) !important;
+        }
+
+        /* 3. Stats Page: ตารางสถิติรายเดือน (Monthly Stats Table) */
+        div#stats-page table {
+            width: 100%;
+            border-collapse: collapse; /* ทำให้เส้นขอบรวมกัน */
+            border-radius: 0.75rem; /* ทำให้ขอบตารางมน */
+            overflow: hidden; /* ซ่อนส่วนที่เกินขอบมน */
+            box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        /* หัวตาราง (Table Header) */
+        div#stats-page table thead tr {
+            background-color: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+        }
+        div#stats-page table th {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-weight: 700;
+            color: #374151; /* gray-700 */
+        }
+        
+        /* แถวในตาราง (Table Body Rows) */
+        div#stats-page table tbody tr {
+            background-color: rgba(255, 255, 255, 0.5);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            transition: background-color 0.2s;
+        }
+        div#stats-page table tbody tr:last-child {
+            border-bottom: none; /* แถวสุดท้ายไม่ต้องมีเส้นขอบ */
+        }
+        div#stats-page table tbody tr:hover {
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+        div#stats-page table td {
+            padding: 0.75rem 1rem;
+            color: #4b5563; /* gray-600 */
+        }
+
+        /* 4. [Bonus] Admin Page: รายการคำขอและบันทึก */
+        div#admin-requests-list > div,
+        div#admin-memos-list > div {
+            background-color: rgba(255, 255, 255, 0.8) !important;
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05);
+        }
