@@ -344,7 +344,7 @@ document.getElementById('logout-button').addEventListener('click', handleLogout)
             }
         }
         // =====================================
-       async function handleRegister(e) {
+      async function handleRegister(e) {
             e.preventDefault();
             
             const formData = {
@@ -361,7 +361,10 @@ document.getElementById('logout-button').addEventListener('click', handleLogout)
             if (!formData.username || !formData.password || !formData.fullName || !formData.email) {
                 showAlert('ผิดพลาด', 'กรุณากรอกข้อมูลให้ครบถ้วน (รวมถึงอีเมล)');
                 return;
-                toggleLoader('register-submit-button', true);
+            }
+
+            // 🟢 โค้ดส่วนนี้ต้องอยู่ "นอก" if block 🟢
+            toggleLoader('register-submit-button', true);
 
             try {
                 const result = await apiCall('POST', 'registerUser', formData);
@@ -378,7 +381,7 @@ document.getElementById('logout-button').addEventListener('click', handleLogout)
             } finally {
                 toggleLoader('register-submit-button', false);
             }
-            }
+        } // <-- 🟢 นี่คือ '}' ที่ขาดหายไป (เพื่อปิดฟังก์ชัน)
         // --- MAIN APP LOGIC ---
 
         // ✅ ในส่วน DOMContentLoaded
