@@ -543,7 +543,8 @@ function handleLogout() {
                 } else {
                     fileUploads.classList.add('hidden');
                 }
-                    document.getElementById('admin-memo-action-modal-close-button').addEventListener('click', () => document.getElementById('admin-memo-action-modal').style.display = 'none');
+        });
+            document.getElementById('admin-memo-action-modal-close-button').addEventListener('click', () => document.getElementById('admin-memo-action-modal').style.display = 'none');
             document.getElementById('admin-memo-cancel-button').addEventListener('click', () => document.getElementById('admin-memo-action-modal').style.display = 'none');
             
             // ========== ADD THIS BLOCK ==========
@@ -552,8 +553,7 @@ function handleLogout() {
             document.getElementById('forgot-password-modal-close-button').addEventListener('click', () => document.getElementById('forgot-password-modal').style.display = 'none');
             document.getElementById('forgot-password-cancel-button').addEventListener('click', () => document.getElementById('forgot-password-modal').style.display = 'none');
             document.getElementById('forgot-password-form').addEventListener('submit', handleForgotPassword);
-            });
-
+            // =====================================
             // Forms
             document.getElementById('request-form').addEventListener('submit', handleRequestFormSubmit);
             document.getElementById('form-add-attendee').addEventListener('click', () => addAttendeeField());
