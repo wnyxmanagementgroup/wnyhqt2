@@ -316,42 +316,24 @@ function handleLogout() {
 
 // ✅ อัพเดท event listener การออกจากระบบ
 document.getElementById('logout-button').addEventListener('click', handleLogout);
-        async function handleRegister(e) {
+       async function handleRegister(e) {
             e.preventDefault();
             
             const formData = {
                 username: document.getElementById('register-username').value.trim(),
                 password: document.getElementById('register-password').value,
                 fullName: document.getElementById('register-fullname').value.trim(),
+                email: document.getElementById('register-email').value.trim(), // + ADD
                 position: document.getElementById('register-position').value.trim(),
                 department: document.getElementById('register-department').value.trim(),
                 role: 'user'
             };
 
-            if (!formData.username || !formData.password || !formData.fullName) {
-                showAlert('ผิดพลาด', 'กรุณากรอกข้อมูลให้ครบถ้วน');
+            // + UPDATE validation
+            if (!formData.username || !formData.password || !formData.fullName || !formData.email) {
+                showAlert('ผิดพลาด', 'กรุณากรอกข้อมูลให้ครบถ้วน (รวมถึงอีเมล)');
                 return;
             }
-
-            toggleLoader('register-submit-button', true);
-
-            try {
-                const result = await apiCall('POST', 'registerUser', formData);
-                
-                if (result.status === 'success') {
-                    showAlert('สำเร็จ', 'ลงทะเบียนสำเร็จ! กรุณาเข้าสู่ระบบ');
-                    document.getElementById('register-modal').style.display = 'none';
-                    document.getElementById('register-form').reset();
-                } else {
-                    showAlert('ผิดพลาด', result.message);
-                }
-            } catch (error) {
-                showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการลงทะเบียน: ' + error.message);
-            } finally {
-                toggleLoader('register-submit-button', false);
-            }
-        }
-
         // --- MAIN APP LOGIC ---
 
         // ✅ ในส่วน DOMContentLoaded
@@ -1523,6 +1505,7 @@ function validateEditForm(formData) {
             if (!user) return;
 
             document.getElementById('profile-fullname').value = user.fullName || '';
+            document.getElementById('profile-email').value = user.email || ''; // + ADD
             document.getElementById('profile-position').value = user.position || '';
             document.getElementById('profile-department').value = user.department || '';
             document.getElementById('profile-username').value = user.username || '';
@@ -1537,30 +1520,10 @@ function validateEditForm(formData) {
             const formData = {
                 username: user.username,
                 fullName: document.getElementById('profile-fullname').value,
+                email: document.getElementById('profile-email').value.trim(), // + ADD
                 position: document.getElementById('profile-position').value,
                 department: document.getElementById('profile-department').value
             };
-
-            toggleLoader('profile-submit-button', true);
-
-            try {
-                const result = await apiCall('POST', 'updateUserProfile', formData);
-                
-                if (result.status === 'success') {
-                    const updatedUser = { ...user, ...formData };
-                    sessionStorage.setItem('currentUser', JSON.stringify(updatedUser));
-                    updateUIForUser(updatedUser);
-                    
-                    showAlert('สำเร็จ', 'อัพเดทข้อมูลส่วนตัวสำเร็จ');
-                } else {
-                    showAlert('ผิดพลาด', result.message);
-                }
-            } catch (error) {
-                showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการอัพเดทข้อมูล: ' + error.message);
-            } finally {
-                toggleLoader('profile-submit-button', false);
-            }
-        }
 
         async function handlePasswordUpdate(e) {
             e.preventDefault();
@@ -2069,7 +2032,7 @@ async function handleDeleteRequest(requestId) {
                             <tr class="bg-gray-100">
                                 <th class="px-4 py-2 text-left">ชื่อผู้ใช้</th>
                                 <th class="px-4 py-2 text-left">ชื่อ-นามสกุล</th>
-                                <th class="px-4 py-2 text-left">ตำแหน่ง</th>
+                                <th class="px-4 py-2 text-left">อีเมล</th> <th class="px-4 py-2 text-left">ตำแหน่ง</th>
                                 <th class="px-4 py-2 text-left">กลุ่มสาระ/งาน</th>
                                 <th class="px-4 py-2 text-left">บทบาท</th>
                                 <th class="px-4 py-2 text-left">การจัดการ</th>
@@ -2080,7 +2043,7 @@ async function handleDeleteRequest(requestId) {
                                 <tr class="border-b">
                                     <td class="px-4 py-2">${user.username}</td>
                                     <td class="px-4 py-2">${user.fullName}</td>
-                                    <td class="px-4 py-2">${user.position}</td>
+                                    <td class="px-4 py-2">${user.email || 'N/A'}</td> <td class="px-4 py-2">${user.position}</td>
                                     <td class="px-4 py-2">${user.department}</td>
                                     <td class="px-4 py-2">${user.role}</td>
                                     <td class="px-4 py-2">
@@ -2092,7 +2055,6 @@ async function handleDeleteRequest(requestId) {
                     </table>
                 </div>
             `;
-        }
 
         async function deleteUser(username) {
             const confirmed = await showConfirm("ยืนยันการลบ", `คุณแน่ใจหรือไม่ว่าต้องการลบผู้ใช้ ${username}?`);
@@ -2113,7 +2075,7 @@ async function handleDeleteRequest(requestId) {
 
         function downloadUserTemplate() {
             const template = [
-                ['Username', 'Password', 'FullName', 'Position', 'Department', 'Role', 'SpecialPosition']
+                ['Username', 'Password', 'FullName', 'Email', 'Position', 'Department', 'Role', 'SpecialPosition'] // + ADD 'Email'
             ];
             const ws = XLSX.utils.aoa_to_sheet(template);
             const wb = XLSX.utils.book_new();
