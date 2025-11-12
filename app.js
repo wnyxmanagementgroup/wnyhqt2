@@ -3011,7 +3011,7 @@ window.debugChartCreation = debugChartCreation;
             }
         }
 
-// แทนที่ฟังก์ชัน renderAdminRequestsList ทั้งหมดด้วยเวอร์ชันใหม่นี้
+// แทนที่ฟังก์ชัน renderAdminRequestsList ทั้งหมดด้วยเวอร์ชันใหม่
 function renderAdminRequestsList(requests) {
     const container = document.getElementById('admin-requests-list');
     
@@ -3077,7 +3077,7 @@ function renderAdminRequestsList(requests) {
                             </a>
                         ` : `
                             <button onclick="openDispatchModal('${request.id}')" 
-                                    class="btn bg-orange-500 text-white btn-sm">
+                                    class="btn bg-orange-500 text-white btn-sm dispatch-button">
                                 ออกหนังสือส่ง
                             </button>
                         `}
@@ -3086,6 +3086,22 @@ function renderAdminRequestsList(requests) {
             </div>
         `;
     }).join('');
+
+    // ✅ เพิ่ม Event Listener สำหรับปุ่มออกหนังสือส่ง
+    setTimeout(() => {
+        const dispatchButtons = document.querySelectorAll('.dispatch-button');
+        console.log(`🔍 Found ${dispatchButtons.length} dispatch buttons`);
+        
+        dispatchButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const requestId = this.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+                console.log("🖱️ Dispatch button clicked for:", requestId);
+                if (requestId) {
+                    openDispatchModal(requestId);
+                }
+            });
+        });
+    }, 100);
 }
 
         async function fetchAllMemos() {
@@ -3156,17 +3172,44 @@ function renderAdminRequestsList(requests) {
         }
 
         // ฟังก์ชันเปิด Modal ส่งหนังสือส่ง
-        function openDispatchModal(requestId) {
-            if (!checkAdminAccess()) {
-                showAlert('ผิดพลาด', 'คุณไม่มีสิทธิ์ใช้งานฟังก์ชันนี้');
-                return;
-            }
-            document.getElementById('dispatch-request-id').value = requestId;
-            // ตั้งค่าปีปัจจุบัน
-            const currentYear = new Date().getFullYear() + 543;
-            document.getElementById('dispatch-year').value = currentYear;
-            document.getElementById('dispatch-modal').style.display = 'flex';
-        }
+       // แทนที่ฟังก์ชัน openDispatchModal ทั้งหมด
+function openDispatchModal(requestId) {
+    console.log("🔧 openDispatchModal called with requestId:", requestId);
+    
+    if (!checkAdminAccess()) {
+        console.error("❌ Admin access denied");
+        showAlert('ผิดพลาด', 'คุณไม่มีสิทธิ์ใช้งานฟังก์ชันนี้');
+        return;
+    }
+    
+    // ตรวจสอบว่ามี element ต่างๆ หรือไม่
+    const requestIdInput = document.getElementById('dispatch-request-id');
+    const yearInput = document.getElementById('dispatch-year');
+    const modal = document.getElementById('dispatch-modal');
+    
+    console.log("🔍 Elements check:", {
+        requestIdInput: !!requestIdInput,
+        yearInput: !!yearInput,
+        modal: !!modal
+    });
+    
+    if (!requestIdInput || !yearInput || !modal) {
+        console.error("❌ Required elements not found");
+        showAlert('ระบบผิดพลาด', 'ไม่พบองค์ประกอบที่จำเป็นในหน้า');
+        return;
+    }
+    
+    // ตั้งค่าข้อมูล
+    requestIdInput.value = requestId;
+    
+    // ตั้งค่าปีปัจจุบัน (พ.ศ.)
+    const currentYear = new Date().getFullYear() + 543;
+    yearInput.value = currentYear;
+    
+    // แสดง modal
+    modal.style.display = 'flex';
+    console.log("✅ Dispatch modal opened successfully");
+}
 
         // ฟังก์ชันเปิด Modal จัดการบันทึกข้อความ
         function openAdminMemoAction(memoId) {
@@ -3221,14 +3264,20 @@ async function handleCommandApproval(e) {
 
         
         // แทนที่ฟังก์ชัน handleDispatchFormSubmit ทั้งหมด
+// แทนที่ฟังก์ชัน handleDispatchFormSubmit ทั้งหมด
 async function handleDispatchFormSubmit(e) {
     e.preventDefault();
+    console.log("📦 handleDispatchFormSubmit called");
     
     const requestId = document.getElementById('dispatch-request-id').value;
     const dispatchMonth = document.getElementById('dispatch-month').value;
     const dispatchYear = document.getElementById('dispatch-year').value;
     const commandCount = document.getElementById('command-count').value;
     const memoCount = document.getElementById('memo-count').value;
+
+    console.log("📋 Form data:", {
+        requestId, dispatchMonth, dispatchYear, commandCount, memoCount
+    });
 
     if (!dispatchMonth || !dispatchYear || !commandCount || !memoCount) {
         showAlert('ผิดพลาด', 'กรุณากรอกข้อมูลให้ครบถ้วน');
@@ -3249,6 +3298,7 @@ async function handleDispatchFormSubmit(e) {
     toggleLoader('dispatch-submit-button', true);
 
     try {
+        console.log("📤 Sending dispatch data to server...");
         const result = await apiCall('POST', 'generateDispatchDocument', {
             requestId: requestId,
             month: dispatchMonth,
@@ -3257,6 +3307,8 @@ async function handleDispatchFormSubmit(e) {
             memoCount: parseInt(memoCount),
             generatedBy: getCurrentUser().username
         });
+        
+        console.log("📥 Server response:", result);
         
         if (result.status === 'success') {
             showAlert('สำเร็จ', 'สร้างหนังสือส่งสำเร็จ');
@@ -3270,7 +3322,7 @@ async function handleDispatchFormSubmit(e) {
             showAlert('ผิดพลาด', result.message || 'ไม่สามารถสร้างหนังสือส่งได้');
         }
     } catch (error) {
-        console.error('Dispatch error:', error);
+        console.error('❌ Dispatch error:', error);
         showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการสร้างหนังสือส่ง: ' + error.message);
     } finally {
         toggleLoader('dispatch-submit-button', false);
@@ -3555,7 +3607,41 @@ function enhanceEditFunctionSafety() {
     
     console.log('Edit function safety check completed');
 }
+// ✅ เพิ่มฟังก์ชันทดสอบระบบหนังสือส่ง
+function testDispatchSystem() {
+    console.log("🧪 Testing Dispatch System:");
+    
+    // ตรวจสอบฟังก์ชัน
+    console.log("🔧 Function check:", {
+        openDispatchModal: typeof openDispatchModal,
+        handleDispatchFormSubmit: typeof handleDispatchFormSubmit,
+        renderAdminRequestsList: typeof renderAdminRequestsList
+    });
+    
+    // ตรวจสอบ elements
+    console.log("🔍 Element check:", {
+        adminRequestsList: document.getElementById('admin-requests-list'),
+        dispatchModal: document.getElementById('dispatch-modal'),
+        dispatchForm: document.getElementById('dispatch-form')
+    });
+    
+    // ตรวจสอบข้อมูล
+    console.log("📊 Data check:", {
+        allRequestsCache: allRequestsCache?.length,
+        currentUser: getCurrentUser()
+    });
+}
 
+// ✅ ทำให้ฟังก์ชันสามารถเรียกใช้จาก global scope ได้
+window.openDispatchModal = openDispatchModal;
+window.openCommandApproval = openCommandApproval;
+window.handleDispatchFormSubmit = handleDispatchFormSubmit;
+window.testDispatchSystem = testDispatchSystem;
+
+// 🔧 เรียกใช้เมื่อโหลดหน้าเพื่อตรวจสอบ
+setTimeout(() => {
+    console.log("🚀 Dispatch system initialized");
+}, 1000);
 // เรียกใช้เมื่อโหลดหน้า
 enhanceEditFunctionSafety();
 
