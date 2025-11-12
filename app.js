@@ -361,6 +361,23 @@ document.getElementById('logout-button').addEventListener('click', handleLogout)
             if (!formData.username || !formData.password || !formData.fullName || !formData.email) {
                 showAlert('ผิดพลาด', 'กรุณากรอกข้อมูลให้ครบถ้วน (รวมถึงอีเมล)');
                 return;
+                toggleLoader('register-submit-button', true);
+
+            try {
+                const result = await apiCall('POST', 'registerUser', formData);
+                
+                if (result.status === 'success') {
+                    showAlert('สำเร็จ', 'ลงทะเบียนสำเร็จ! กรุณาเข้าสู่ระบบ');
+                    document.getElementById('register-modal').style.display = 'none';
+                    document.getElementById('register-form').reset();
+                } else {
+                    showAlert('ผิดพลาด', result.message);
+                }
+            } catch (error) {
+                showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการลงทะเบียน: ' + error.message);
+            } finally {
+                toggleLoader('register-submit-button', false);
+            }
             }
         // --- MAIN APP LOGIC ---
 
@@ -1561,6 +1578,28 @@ function validateEditForm(formData) {
                 position: document.getElementById('profile-position').value,
                 department: document.getElementById('profile-department').value
             };
+
+            // 🟢 ส่วนที่หายไปคือด้านล่างนี้ 🟢
+            toggleLoader('profile-submit-button', true);
+
+            try {
+                const result = await apiCall('POST', 'updateUserProfile', formData);
+                
+                if (result.status === 'success') {
+                    const updatedUser = { ...user, ...formData };
+                    sessionStorage.setItem('currentUser', JSON.stringify(updatedUser));
+                    updateUIForUser(updatedUser);
+                    
+                    showAlert('สำเร็จ', 'อัพเดทข้อมูลส่วนตัวสำเร็จ');
+                } else {
+                    showAlert('ผิดพลาด', result.message);
+                }
+            } catch (error) {
+                showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการอัพเดทข้อมูล: ' + error.message);
+            } finally {
+                toggleLoader('profile-submit-button', false);
+            }
+        }
 
         async function handlePasswordUpdate(e) {
             e.preventDefault();
