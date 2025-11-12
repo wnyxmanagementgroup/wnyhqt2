@@ -244,5 +244,4 @@ div#main-app > header {
             backdrop-filter: blur(14px);
             -webkit-backdrop-filter: blur(14px);
             border: 1px solid rgba(255, 255, 255, 0.3);
-            box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05);
-        }
+            box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.05);}
