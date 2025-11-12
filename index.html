@@ -40,6 +40,9 @@
                 <p class="text-center mt-4 text-sm text-gray-600">
                     ยังไม่มีบัญชี? <button type="button" id="show-register-modal-button" class="font-semibold text-indigo-600 hover:text-indigo-500">สมัครใช้งานที่นี่</button>
                 </p>
+                <p class="text-center mt-2 text-sm">
+                    <button type="button" id="show-forgot-password-modal-button" class="font-semibold text-gray-600 hover:text-indigo-500">ลืมรหัสผ่าน?</button>
+                </p>
             </div>
             
             <!-- กล่องข้อมูลประชาสัมพันธ์ 2 กล่องด้านล่าง -->
@@ -792,6 +795,28 @@
             </div>
         </div>
     </div>
+    <div id="forgot-password-modal" class="modal">
+            <div class="modal-content">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold">ลืมรหัสผ่าน</h3>
+                    <button id="forgot-password-modal-close-button" class="text-gray-500 hover:text-gray-700">&times;</button>
+                </div>
+                <form id="forgot-password-form">
+                    <div class="mb-4">
+                        <label for="forgot-email" class="form-label">อีเมลที่ลงทะเบียนไว้</label>
+                        <input type="email" id="forgot-email" class="form-input" required placeholder="example@wny.ac.th">
+                        <p class="text-sm text-gray-500 mt-2">ระบบจะสร้างรหัสผ่านใหม่และส่งไปยังอีเมลของคุณ</p>
+                    </div>
+                    <div class="flex justify-end gap-4">
+                        <button type="button" id="forgot-password-cancel-button" class="btn bg-gray-500 text-white">ยกเลิก</button>
+                        <button type="submit" id="forgot-password-submit-button" class="btn btn-primary">
+                            <div id="forgot-password-loader" class="loader hidden"></div>
+                            <span>ส่งรหัสผ่านใหม่</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
 <script src="app.js"></script>
 
 </body>
