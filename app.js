@@ -316,6 +316,34 @@ function handleLogout() {
 
 // ✅ อัพเดท event listener การออกจากระบบ
 document.getElementById('logout-button').addEventListener('click', handleLogout);
+// ========== ADD THIS FUNCTION ==========
+        async function handleForgotPassword(e) {
+            e.preventDefault();
+            const email = document.getElementById('forgot-email').value.trim();
+            if (!email) {
+                showAlert('ผิดพลาด', 'กรุณากรอกอีเมล');
+                return;
+            }
+
+            toggleLoader('forgot-password-submit-button', true);
+
+            try {
+                const result = await apiCall('POST', 'handleForgotPassword', { email: email });
+                
+                if (result.status === 'success') {
+                    document.getElementById('forgot-password-modal').style.display = 'none';
+                    document.getElementById('forgot-password-form').reset();
+                    showAlert('ส่งสำเร็จ', 'ระบบได้ส่งรหัสผ่านใหม่ไปยังอีเมลของคุณแล้ว กรุณาตรวจสอบกล่องจดหมาย (Inbox)');
+                } else {
+                    showAlert('ผิดพลาด', result.message);
+                }
+            } catch (error) {
+                showAlert('ผิดพลาด', 'เกิดข้อผิดพลาดในการส่งคำขอ: ' + error.message);
+            } finally {
+                toggleLoader('forgot-password-submit-button', false);
+            }
+        }
+        // =====================================
        async function handleRegister(e) {
             e.preventDefault();
             
@@ -515,6 +543,15 @@ function handleLogout() {
                 } else {
                     fileUploads.classList.add('hidden');
                 }
+                    document.getElementById('admin-memo-action-modal-close-button').addEventListener('click', () => document.getElementById('admin-memo-action-modal').style.display = 'none');
+            document.getElementById('admin-memo-cancel-button').addEventListener('click', () => document.getElementById('admin-memo-action-modal').style.display = 'none');
+            
+            // ========== ADD THIS BLOCK ==========
+            // Forgot Password Modal
+            document.getElementById('show-forgot-password-modal-button').addEventListener('click', () => document.getElementById('forgot-password-modal').style.display = 'flex');
+            document.getElementById('forgot-password-modal-close-button').addEventListener('click', () => document.getElementById('forgot-password-modal').style.display = 'none');
+            document.getElementById('forgot-password-cancel-button').addEventListener('click', () => document.getElementById('forgot-password-modal').style.display = 'none');
+            document.getElementById('forgot-password-form').addEventListener('submit', handleForgotPassword);
             });
 
             // Forms
