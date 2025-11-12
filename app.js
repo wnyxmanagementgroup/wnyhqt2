@@ -626,6 +626,8 @@ function setupEventListeners() {
     document.getElementById('show-register-modal-button').addEventListener('click', () => document.getElementById('register-modal').style.display = 'flex');
     document.getElementById('register-form').addEventListener('submit', handleRegister);
     
+    // ✅ เพิ่มการตั้งค่าพาหนะแบบหลายตัวเลือก
+    setupVehicleMultipleSelection();
     // Stats page events
     document.getElementById('refresh-stats').addEventListener('click', async () => {
         await loadStatsData();
@@ -730,6 +732,20 @@ function setupEventListeners() {
     if (saveDraftBtn) {
         saveDraftBtn.addEventListener('click', saveDraft);
     }
+    document.addEventListener('click', function(e) {
+        // ตรวจสอบการคลิกปุ่มออกหนังสือส่ง
+        if (e.target.matches('.dispatch-button') || 
+            e.target.closest('.dispatch-button')) {
+            const button = e.target.matches('.dispatch-button') ? e.target : e.target.closest('.dispatch-button');
+            const requestId = button.getAttribute('data-request-id') || 
+                            button.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+            
+            if (requestId) {
+                console.log("🖱️ Dispatch button clicked for:", requestId);
+                openDispatchModal(requestId);
+            }
+        }
+    });
     
     // ✅ NEW: Requests List Actions
     const requestsList = document.getElementById('requests-list');
@@ -824,47 +840,122 @@ function setupEventListeners() {
 }
 
 // --- EDIT PAGE FUNCTIONS ---
+// ==================== EDIT PAGE FUNCTIONS ====================
 
+// ✅ ฟังก์ชันตั้งค่า Event Listeners สำหรับหน้าแก้ไข
 function setupEditPageEventListeners() {
+    console.log("🔧 Setting up edit page event listeners...");
+    
+    // ✅ ลบ event listeners เดิมก่อน (ป้องกัน duplication)
+    removeEditPageEventListeners();
+    
     // ✅ ปุ่มกลับสู่แดชบอร์ด
-    document.getElementById('back-to-dashboard').addEventListener('click', () => {
-        console.log("🏠 Returning to dashboard from edit page");
-        switchPage('dashboard-page');
-    });
+    const backButton = document.getElementById('back-to-dashboard');
+    if (backButton) {
+        backButton.addEventListener('click', handleBackToDashboard);
+    }
     
     // ✅ ปุ่มสร้างเอกสาร
-    document.getElementById('generate-document-button').addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log("Generate document button clicked");
-        generateDocumentFromDraft();
-    });
+    const generateButton = document.getElementById('generate-document-button');
+    if (generateButton) {
+        generateButton.addEventListener('click', handleGenerateDocument);
+    }
     
     // ✅ ปุ่มเพิ่มผู้ร่วมเดินทาง
-    document.getElementById('edit-add-attendee').addEventListener('click', () => addEditAttendeeField());
+    const addAttendeeButton = document.getElementById('edit-add-attendee');
+    if (addAttendeeButton) {
+        addAttendeeButton.addEventListener('click', handleAddEditAttendee);
+    }
     
     // ✅ Expense options
     document.querySelectorAll('input[name="edit-expense_option"]').forEach(radio => {
-        radio.addEventListener('change', toggleEditExpenseOptions);
+        radio.addEventListener('change', handleEditExpenseOptionChange);
     });
     
     // ✅ Vehicle options
     document.querySelectorAll('input[name="edit-vehicle_option"]').forEach(radio => {
-        radio.addEventListener('change', toggleEditVehicleOptions);
+        radio.addEventListener('change', handleEditVehicleOptionChange);
     });
     
     // ✅ Department change
-    document.getElementById('edit-department').addEventListener('change', (e) => {
-        const selectedPosition = e.target.value;
-        const headNameInput = document.getElementById('edit-head-name');
-        headNameInput.value = specialPositionMap[selectedPosition] || '';
+    const departmentSelect = document.getElementById('edit-department');
+    if (departmentSelect) {
+        departmentSelect.addEventListener('change', handleEditDepartmentChange);
+    }
+    
+    // ✅ ตั้งค่า expense options เริ่มต้น
+    toggleEditExpenseOptions();
+    
+    // ✅ ตั้งค่า vehicle options เริ่มต้น
+    toggleEditVehicleOptions();
+    
+    console.log("✅ Edit page event listeners setup completed");
+}
+
+// ✅ ฟังก์ชันลบ Event Listeners เดิม
+function removeEditPageEventListeners() {
+    const elements = [
+        { id: 'back-to-dashboard', event: 'click', handler: handleBackToDashboard },
+        { id: 'generate-document-button', event: 'click', handler: handleGenerateDocument },
+        { id: 'edit-add-attendee', event: 'click', handler: handleAddEditAttendee },
+        { id: 'edit-department', event: 'change', handler: handleEditDepartmentChange }
+    ];
+    
+    elements.forEach(item => {
+        const element = document.getElementById(item.id);
+        if (element) {
+            element.removeEventListener(item.event, item.handler);
+        }
     });
+    
+    // ลบ event listeners จาก radio buttons
+    document.querySelectorAll('input[name="edit-expense_option"]').forEach(radio => {
+        radio.removeEventListener('change', handleEditExpenseOptionChange);
+    });
+    
+    document.querySelectorAll('input[name="edit-vehicle_option"]').forEach(radio => {
+        radio.removeEventListener('change', handleEditVehicleOptionChange);
+    });
+}
+
+// ✅ Event Handlers
+function handleBackToDashboard() {
+    console.log("🏠 Returning to dashboard from edit page");
+    switchPage('dashboard-page');
+}
+
+function handleGenerateDocument(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log("📄 Generate document button clicked");
+    generateDocumentFromDraft();
+}
+
+function handleAddEditAttendee() {
+    addEditAttendeeField();
+}
+
+function handleEditExpenseOptionChange() {
+    toggleEditExpenseOptions();
+}
+
+function handleEditVehicleOptionChange() {
+    toggleEditVehicleOptions();
+}
+
+function handleEditDepartmentChange(e) {
+    const selectedPosition = e.target.value;
+    const headNameInput = document.getElementById('edit-head-name');
+    headNameInput.value = specialPositionMap[selectedPosition] || '';
 }
 
 // ✅ ฟังก์ชันเติมข้อมูลในฟอร์มแก้ไข
 async function populateEditForm(requestData) {
     try {
-        console.log("Populating edit form with:", requestData);
+        console.log("📝 Populating edit form with:", requestData);
+        
+        // แสดง loading state
+        showEditPageLoading(true);
         
         // เติมข้อมูลพื้นฐาน
         document.getElementById('edit-draft-id').value = requestData.draftId || '';
@@ -895,77 +986,103 @@ async function populateEditForm(requestData) {
         attendeesList.innerHTML = '';
         
         if (requestData.attendees && requestData.attendees.length > 0) {
+            console.log("👥 Loading attendees:", requestData.attendees);
             requestData.attendees.forEach((attendee, index) => {
                 if (attendee.name && attendee.position) {
                     addEditAttendeeField(attendee.name, attendee.position);
                 }
             });
+        } else {
+            console.log("👥 No attendees found");
         }
         
         // เติมข้อมูลค่าใช้จ่าย
-        if (requestData.expenseOption === 'partial') {
-            document.getElementById('edit-expense_partial').checked = true;
-            toggleEditExpenseOptions();
-            
-            if (requestData.expenseItems && requestData.expenseItems.length > 0) {
-                const expenseItems = Array.isArray(requestData.expenseItems) ? 
-                requestData.expenseItems : 
-                JSON.parse(requestData.expenseItems || '[]');
-                
-                expenseItems.forEach(item => {
-                    const checkboxes = document.querySelectorAll('input[name="edit-expense_item"]');
-                    checkboxes.forEach(chk => {
-                        if (chk.dataset.itemName === item.name) {
-                            chk.checked = true;
-                            if (item.name === 'ค่าใช้จ่ายอื่นๆ' && item.detail) {
-                                document.getElementById('edit-expense_other_text').value = item.detail;
-                            }
-                        }
-                    });
-                });
-            }
-            
-            if (requestData.totalExpense) {
-                document.getElementById('edit-total-expense').value = requestData.totalExpense;
-            }
-        } else {
-            document.getElementById('edit-expense_no').checked = true;
-            toggleEditExpenseOptions();
-        }
+        await fillEditExpenseData(requestData);
         
         // เติมข้อมูลการเดินทาง
-        if (requestData.vehicleOption) {
-            const vehicleRadio = document.getElementById(`edit-vehicle_${requestData.vehicleOption}`);
-            if (vehicleRadio) {
-                vehicleRadio.checked = true;
-                toggleEditVehicleOptions();
-                
-                if (requestData.vehicleOption === 'private' && requestData.licensePlate) {
-                    document.getElementById('edit-license-plate').value = requestData.licensePlate;
-                }
-            }
-        }
-        
+        await fillEditVehicleData(requestData);
+        fillEditVehicleData(requestData);
         // เติมข้อมูลผู้ลงนาม
-        if (requestData.department) {
-            document.getElementById('edit-department').value = requestData.department;
-            const headNameInput = document.getElementById('edit-head-name');
-            headNameInput.value = specialPositionMap[requestData.department] || '';
-        }
+        await fillEditSignerData(requestData);
         
-        if (requestData.headName) {
-            document.getElementById('edit-head-name').value = requestData.headName;
-        }
+        // ซ่อน loading state
+        showEditPageLoading(false);
         
-        console.log("Edit form populated successfully");
+        console.log("✅ Edit form populated successfully");
         
     } catch (error) {
-        console.error("Error populating edit form:", error);
+        console.error("❌ Error populating edit form:", error);
+        showEditPageLoading(false);
         throw error;
     }
 }
 
-// ฟังก์ชันเพิ่มผู้ร่วมเดินทางในหน้าแก้ไข
+// ✅ ฟังก์ชันเติมข้อมูลค่าใช้จ่าย
+async function fillEditExpenseData(requestData) {
+    const expenseOption = requestData.expenseOption || 'no';
+    
+    if (expenseOption === 'partial') {
+        document.getElementById('edit-expense_partial').checked = true;
+        toggleEditExpenseOptions();
+        
+        if (requestData.expenseItems && requestData.expenseItems.length > 0) {
+            const expenseItems = Array.isArray(requestData.expenseItems) ? 
+                requestData.expenseItems : 
+                JSON.parse(requestData.expenseItems || '[]');
+            
+            console.log("💰 Loading expense items:", expenseItems);
+            
+            expenseItems.forEach(item => {
+                const checkboxes = document.querySelectorAll('input[name="edit-expense_item"]');
+                checkboxes.forEach(chk => {
+                    if (chk.dataset.itemName === item.name) {
+                        chk.checked = true;
+                        if (item.name === 'ค่าใช้จ่ายอื่นๆ' && item.detail) {
+                            document.getElementById('edit-expense_other_text').value = item.detail;
+                        }
+                    }
+                });
+            });
+        }
+        
+        if (requestData.totalExpense) {
+            document.getElementById('edit-total-expense').value = requestData.totalExpense;
+        }
+    } else {
+        document.getElementById('edit-expense_no').checked = true;
+        toggleEditExpenseOptions();
+    }
+}
+
+// ✅ ฟังก์ชันเติมข้อมูลการเดินทาง
+async function fillEditVehicleData(requestData) {
+    const vehicleOption = requestData.vehicleOption || 'gov';
+    
+    const vehicleRadio = document.getElementById(`edit-vehicle_${vehicleOption}`);
+    if (vehicleRadio) {
+        vehicleRadio.checked = true;
+        toggleEditVehicleOptions();
+        
+        if (vehicleOption === 'private' && requestData.licensePlate) {
+            document.getElementById('edit-license-plate').value = requestData.licensePlate;
+        }
+    }
+}
+
+// ✅ ฟังก์ชันเติมข้อมูลผู้ลงนาม
+async function fillEditSignerData(requestData) {
+    if (requestData.department) {
+        document.getElementById('edit-department').value = requestData.department;
+        const headNameInput = document.getElementById('edit-head-name');
+        headNameInput.value = specialPositionMap[requestData.department] || '';
+    }
+    
+    if (requestData.headName) {
+        document.getElementById('edit-head-name').value = requestData.headName;
+    }
+}
+
+// ✅ ฟังก์ชันเพิ่มผู้ร่วมเดินทางในหน้าแก้ไข
 function addEditAttendeeField(name = '', position = '') {
     const list = document.getElementById('edit-attendees-list');
     const attendeeDiv = document.createElement('div');
@@ -973,6 +1090,7 @@ function addEditAttendeeField(name = '', position = '') {
     
     const isStandardPosition = ['ผู้อำนวยการ', 'รองผู้อำนวยการ', 'ครู', 'ครูผู้ช่วย', 'พนักงานราชการ', 'ครูอัตราจ้าง', 'พนักงานขับรถ', 'นักเรียน'].includes(position);
     const selectValue = isStandardPosition ? position : (position ? 'other' : '');
+    const otherValue = !isStandardPosition && position ? position : '';
     
     attendeeDiv.innerHTML = `
         <input type="text" class="form-input attendee-name md:col-span-1" placeholder="ชื่อ-นามสกุล" value="${name}" required>
@@ -989,12 +1107,13 @@ function addEditAttendeeField(name = '', position = '') {
                 <option value="นักเรียน">นักเรียน</option>
                 <option value="other">อื่นๆ (โปรดระบุ)</option>
             </select>
-            <input type="text" class="form-input attendee-position-other hidden mt-1" placeholder="ระบุตำแหน่ง" value="${!isStandardPosition && position ? position : ''}">
+            <input type="text" class="form-input attendee-position-other hidden mt-1" placeholder="ระบุตำแหน่ง" value="${otherValue}">
         </div>
-        <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove()">ลบ</button>
+        <button type="button" class="btn btn-danger btn-sm remove-attendee">ลบ</button>
     `;
     list.appendChild(attendeeDiv);
     
+    // ตั้งค่า select value
     const select = attendeeDiv.querySelector('.attendee-position-select');
     const otherInput = attendeeDiv.querySelector('.attendee-position-other');
 
@@ -1005,15 +1124,22 @@ function addEditAttendeeField(name = '', position = '') {
         }
     }
 
+    // Event listener สำหรับ select change
     select.addEventListener('change', () => {
         otherInput.classList.toggle('hidden', select.value !== 'other');
         if (select.value !== 'other') {
             otherInput.value = '';
         }
     });
+    
+    // Event listener สำหรับปุ่มลบ
+    const removeButton = attendeeDiv.querySelector('.remove-attendee');
+    removeButton.addEventListener('click', function() {
+        attendeeDiv.remove();
+    });
 }
 
-// ฟังก์ชัน toggle สำหรับหน้าแก้ไข
+// ✅ ฟังก์ชัน toggle สำหรับหน้าแก้ไข - Expense
 function toggleEditExpenseOptions() {
     const partialOptions = document.getElementById('edit-partial-expense-options');
     const totalContainer = document.getElementById('edit-total-expense-container');
@@ -1025,6 +1151,7 @@ function toggleEditExpenseOptions() {
         partialOptions.classList.add('hidden');
         totalContainer.classList.add('hidden');
         
+        // รีเซ็ตค่า expense items
         document.querySelectorAll('input[name="edit-expense_item"]').forEach(chk => {
             chk.checked = false;
         });
@@ -1033,6 +1160,7 @@ function toggleEditExpenseOptions() {
     }
 }
 
+// ✅ ฟังก์ชัน toggle สำหรับหน้าแก้ไข - Vehicle
 function toggleEditVehicleOptions() {
     const privateDetails = document.getElementById('edit-private-vehicle-details');
     
@@ -1064,12 +1192,15 @@ async function openEditPage(requestId) {
         
         console.log("📡 Calling API with:", { requestId, username });
 
-        document.getElementById('edit-result').classList.add('hidden');
+        // รีเซ็ตฟอร์มก่อนโหลดข้อมูลใหม่
+        resetEditPage();
+        
+        // แสดง loading state
         document.getElementById('edit-attendees-list').innerHTML = `
-        <div class="text-center p-4">
-            <div class="loader mx-auto"></div>
-            <p class="mt-2">กำลังโหลดข้อมูล...</p>
-        </div>`;
+            <div class="text-center p-4">
+                <div class="loader mx-auto"></div>
+                <p class="mt-2">กำลังโหลดข้อมูล...</p>
+            </div>`;
 
         const result = await apiCall('GET', 'getDraftRequest', { 
             requestId: requestId, 
@@ -1081,6 +1212,7 @@ async function openEditPage(requestId) {
         if (result.status === 'success' && result.data) {
             let data = result.data;
             
+            // Handle nested data structure
             if (result.data && result.data.data) {
                 data = result.data.data;
                 console.log("🔄 Found nested data structure, using result.data.data");
@@ -1101,6 +1233,7 @@ async function openEditPage(requestId) {
                 return;
             }
 
+            // ปรับปรุงข้อมูลผู้ขอจาก user profile ถ้าจำเป็น
             data.attendees = Array.isArray(data.attendees) ? data.attendees : [];
 
             if ((!data.requesterName || data.requesterName.trim() === '') && user?.fullName) {
@@ -1112,15 +1245,16 @@ async function openEditPage(requestId) {
                 console.log("👤 Filled requesterPosition from user profile:", data.requesterPosition);
             }
 
+            // บันทึก requestId ใน sessionStorage
             sessionStorage.setItem('currentEditRequestId', requestId);
 
+            // เติมข้อมูลลงในฟอร์ม
             await populateEditForm(data);
 
-            const inputRequesterName = document.getElementById('edit-requester-name');
-            const inputRequesterPosition = document.getElementById('edit-requester-position');
-            if (inputRequesterName && data.requesterName) inputRequesterName.value = data.requesterName;
-            if (inputRequesterPosition && data.requesterPosition) inputRequesterPosition.value = data.requesterPosition;
+            // ตั้งค่า Event Listeners
+            setupEditPageEventListeners();
 
+            // เปลี่ยนหน้า
             switchPage('edit-page');
             
             console.log("✅ Edit page opened successfully with requestId:", requestId);
@@ -1245,7 +1379,7 @@ async function generateDocumentFromDraft() {
     console.log("=== generateDocumentFromDraft END ===");
 }
 
-// ฟังก์ชันบันทึกข้อมูลคำขอ
+// ✅ ฟังก์ชันบันทึกข้อมูลคำขอ (Draft)
 async function saveDraft() {
     const formData = getEditFormData();
     const requestId = document.getElementById('edit-request-id').value;
@@ -1278,7 +1412,7 @@ async function saveDraft() {
     }
 }
 
-// ฟังก์ชันดึงข้อมูลจากฟอร์มแก้ไข
+// ✅ ฟังก์ชันดึงข้อมูลจากฟอร์มแก้ไข
 function getEditFormData() {
     try {
         let requestId = document.getElementById('edit-request-id').value;
@@ -1339,6 +1473,15 @@ function getEditFormData() {
             return null;
         }
 
+        // ✅ ดึงข้อมูลพาหนะแบบใหม่
+        const vehicleData = getEditVehicleDataFromForm();
+        
+        // ✅ ตรวจสอบว่ามีการเลือกพาหนะอย่างน้อย 1 อย่าง
+        if (vehicleData.vehicleOptions.length === 0) {
+            showAlert('ข้อมูลไม่ครบถ้วน', 'กรุณาเลือกพาหนะอย่างน้อย 1 ชนิด');
+            return null;
+        }
+
         const formData = {
             draftId: draftId || '',
             requestId: requestId || '',
@@ -1354,8 +1497,9 @@ function getEditFormData() {
             expenseOption: expenseOption ? expenseOption.value : 'no',
             expenseItems: expenseItems,
             totalExpense: document.getElementById('edit-total-expense').value || 0,
-            vehicleOption: document.querySelector('input[name="edit-vehicle_option"]:checked')?.value || 'gov',
-            licensePlate: document.getElementById('edit-license-plate').value.trim(),
+            // ✅ ใช้ข้อมูลพาหนะแบบใหม่แทน vehicleOption เดิม
+            vehicleOptions: vehicleData.vehicleOptions,
+            vehicleDetails: vehicleData.vehicleDetails,
             department: document.getElementById('edit-department').value,
             headName: document.getElementById('edit-head-name').value,
             isEdit: true
@@ -1371,30 +1515,35 @@ function getEditFormData() {
     }
 }
 
-// ฟังก์ชัน validation สำหรับหน้าแก้ไข
+// ✅ ฟังก์ชัน validation สำหรับหน้าแก้ไข
 function validateEditForm(formData) {
     console.log("Validating edit form:", formData);
     
+    // ตรวจสอบวันที่
     if (!formData.docDate) {
         showAlert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกวันที่");
         return false;
     }
     
+    // ตรวจสอบข้อมูลผู้ขอ
     if (!formData.requesterName || !formData.requesterPosition) {
         showAlert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกชื่อและตำแหน่งผู้ขอ");
         return false;
     }
     
+    // ตรวจสอบสถานที่
     if (!formData.location) {
         showAlert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกสถานที่ไปราชการ");
         return false;
     }
     
+    // ตรวจสอบวัตถุประสงค์
     if (!formData.purpose) {
         showAlert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกวัตถุประสงค์");
         return false;
     }
     
+    // ตรวจสอบวันที่เริ่มต้นและสิ้นสุด
     if (!formData.startDate || !formData.endDate) {
         showAlert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกวันที่เริ่มต้นและสิ้นสุด");
         return false;
@@ -1408,6 +1557,24 @@ function validateEditForm(formData) {
         return false;
     }
     
+    // ตรวจสอบข้อมูลผู้ร่วมเดินทาง
+    if (formData.attendees && formData.attendees.length > 0) {
+        const invalidAttendees = formData.attendees.filter(att => 
+            !att.name || !att.position || att.name.trim() === '' || att.position.trim() === ''
+        );
+        if (invalidAttendees.length > 0) {
+            showAlert("ข้อมูลไม่ครบถ้วน", "กรุณากรอกชื่อและตำแหน่งผู้ร่วมเดินทางให้ครบถ้วน");
+            return false;
+        }
+    }
+    
+    // ตรวจสอบข้อมูลค่าใช้จ่าย
+    if (formData.expenseOption === 'partial' && formData.expenseItems.length === 0) {
+        showAlert("ข้อมูลไม่ครบถ้วน", "กรุณาเลือกรายการค่าใช้จ่ายที่ต้องการเบิก");
+        return false;
+    }
+    
+    // ตรวจสอบข้อมูลการแก้ไข
     if (formData.isEdit && !formData.requestId && !formData.draftId) {
         showAlert("ข้อมูลไม่ครบถ้วน", "ไม่พบรหัสคำขอสำหรับการแก้ไข");
         return false;
@@ -1417,84 +1584,64 @@ function validateEditForm(formData) {
     return true;
 }
 
-// ✅ ฟังก์ชันตรวจสอบข้อมูลพื้นฐาน
-function validateEditData(data) {
-    if (!data) {
-        return { isValid: false, message: "ไม่มีข้อมูล" };
-    }
+// ✅ ฟังก์ชันรีเซ็ตหน้าแก้ไข
+function resetEditPage() {
+    console.log("🧹 Resetting edit page...");
     
-    if (data.status === 'error') {
-        return { isValid: false, message: data.message || "ข้อมูลมีข้อผิดพลาด" };
-    }
+    // รีเซ็ตฟอร์ม
+    document.getElementById('edit-request-form').reset();
+    document.getElementById('edit-attendees-list').innerHTML = '';
+    document.getElementById('edit-result').classList.add('hidden');
     
-    const requiredFields = ['requesterName', 'requesterPosition', 'location', 'purpose'];
-    const missingFields = requiredFields.filter(field => !data[field] || data[field].trim() === '');
+    // ล้างข้อมูลชั่วคราว
+    sessionStorage.removeItem('currentEditRequestId');
+    document.getElementById('edit-request-id').value = '';
+    document.getElementById('edit-draft-id').value = '';
     
-    if (missingFields.length > 0) {
-        return { 
-            isValid: false, 
-            message: `ข้อมูลไม่ครบถ้วน: ${missingFields.join(', ')}` 
-        };
-    }
+    // รีเซ็ตค่าเริ่มต้น
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('edit-doc-date').value = today;
+    document.getElementById('edit-start-date').value = today;
+    document.getElementById('edit-end-date').value = today;
     
-    return { isValid: true };
+    console.log("✅ Edit page reset complete");
 }
 
-// ✅ ฟังก์ชันตรวจสอบข้อมูลจาก API
-function validateApiResponse(result) {
-    if (!result) {
-        return { isValid: false, message: "ไม่ได้รับข้อมูลจากเซิร์ฟเวอร์" };
-    }
-    
-    if (result.status !== 'success') {
-        return { isValid: false, message: result.message || "การเรียก API ไม่สำเร็จ" };
-    }
-    
-    if (!result.data) {
-        return { isValid: false, message: "ไม่พบข้อมูลใน response" };
-    }
-    
-    if (result.data.status === 'error') {
-        return { isValid: false, message: result.data.message || "ข้อมูลมีข้อผิดพลาด" };
-    }
-    
-    return { isValid: true, data: result.data };
-}
-
-// ฟังก์ชันตรวจสอบและจัดการการแก้ไขที่ปลอดภัย
-async function handleEditSafe(requestId) {
-    try {
-        if (!requestId) {
-            console.warn("No requestId provided for edit");
-            return false;
-        }
-        
-        if (typeof requestId !== 'string' || requestId.length < 5) {
-            console.warn("Invalid requestId format:", requestId);
-            return false;
-        }
-        
-        const existingRequest = allRequestsCache.find(req => req.id === requestId);
-        if (!existingRequest) {
-            console.warn("Request not found in cache:", requestId);
-        }
-        
-        return true;
-        
-    } catch (error) {
-        console.error("Error in handleEditSafe:", error);
-        return false;
+// ✅ ฟังก์ชันแสดง/ซ่อน loading state
+function showEditPageLoading(show) {
+    const loadingElement = document.getElementById('edit-loading');
+    if (loadingElement) {
+        loadingElement.classList.toggle('hidden', !show);
     }
 }
 
-// ฟังก์ชันเพิ่มความปลอดภัยให้ฟังก์ชันแก้ไข
+// ✅ ฟังก์ชันตรวจสอบว่ามีการเปลี่ยนแปลงข้อมูลในฟอร์ม
+function isEditFormDirty() {
+    const originalData = sessionStorage.getItem('originalEditFormData');
+    if (!originalData) return false;
+    
+    const currentData = JSON.stringify(getEditFormData());
+    return originalData !== currentData;
+}
+
+// ✅ ฟังก์ชันบันทึกข้อมูลต้นฉบับของฟอร์ม
+function saveOriginalFormData() {
+    const formData = getEditFormData();
+    if (formData) {
+        sessionStorage.setItem('originalEditFormData', JSON.stringify(formData));
+    }
+}
+
+// ✅ ฟังก์ชันเพิ่มความปลอดภัยให้ฟังก์ชันแก้ไข
 function enhanceEditFunctionSafety() {
     const requiredFunctions = [
         'openEditPage', 
         'generateDocumentFromDraft', 
         'saveDraft',
         'getEditFormData',
-        'populateEditForm'
+        'populateEditForm',
+        'setupEditPageEventListeners',
+        'resetEditPage'
     ];
     
     requiredFunctions.forEach(funcName => {
@@ -1506,8 +1653,262 @@ function enhanceEditFunctionSafety() {
         }
     });
     
-    console.log('Edit function safety check completed');
+    console.log('✅ Edit function safety check completed');
 }
+// ==================== VEHICLE MULTIPLE SELECTION FUNCTIONS ====================
+
+// ✅ ฟังก์ชันจัดการการเลือกพาหนะในฟอร์มสร้างคำขอ
+function setupVehicleMultipleSelection() {
+    console.log("🚗 Setting up vehicle multiple selection...");
+    
+    // ฟอร์มสร้างคำขอ
+    const privateCheckbox = document.getElementById('vehicle_private');
+    const publicCheckbox = document.getElementById('vehicle_public');
+    
+    if (privateCheckbox) {
+        privateCheckbox.addEventListener('change', togglePrivateVehicleDetails);
+    }
+    
+    if (publicCheckbox) {
+        publicCheckbox.addEventListener('change', togglePublicVehicleDetails);
+    }
+    
+    // ฟอร์มแก้ไข
+    const editPrivateCheckbox = document.getElementById('edit-vehicle_private');
+    const editPublicCheckbox = document.getElementById('edit-vehicle_public');
+    
+    if (editPrivateCheckbox) {
+        editPrivateCheckbox.addEventListener('change', toggleEditPrivateVehicleDetails);
+    }
+    
+    if (editPublicCheckbox) {
+        editPublicCheckbox.addEventListener('change', toggleEditPublicVehicleDetails);
+    }
+}
+
+// ✅ ฟังก์ชันแสดง/ซ่อนรายละเอียดรถส่วนตัว (ฟอร์มสร้าง)
+function togglePrivateVehicleDetails() {
+    const privateDetails = document.getElementById('private-vehicle-details');
+    const licensePlateInput = document.getElementById('form-license-plate');
+    
+    if (this.checked) {
+        privateDetails.classList.remove('hidden');
+        licensePlateInput.required = true;
+    } else {
+        privateDetails.classList.add('hidden');
+        licensePlateInput.required = false;
+        licensePlateInput.value = '';
+    }
+}
+
+// ✅ ฟังก์ชันแสดง/ซ่อนรายละเอียดพาหนะอื่นๆ (ฟอร์มสร้าง)
+function togglePublicVehicleDetails() {
+    const publicDetails = document.getElementById('public-vehicle-details');
+    const otherVehicleInput = document.getElementById('form-other-vehicle');
+    
+    if (this.checked) {
+        publicDetails.classList.remove('hidden');
+        otherVehicleInput.required = true;
+    } else {
+        publicDetails.classList.add('hidden');
+        otherVehicleInput.required = false;
+        otherVehicleInput.value = '';
+    }
+}
+
+// ✅ ฟังก์ชันแสดง/ซ่อนรายละเอียดรถส่วนตัว (ฟอร์มแก้ไข)
+function toggleEditPrivateVehicleDetails() {
+    const privateDetails = document.getElementById('edit-private-vehicle-details');
+    const licensePlateInput = document.getElementById('edit-license-plate');
+    
+    if (this.checked) {
+        privateDetails.classList.remove('hidden');
+        licensePlateInput.required = true;
+    } else {
+        privateDetails.classList.add('hidden');
+        licensePlateInput.required = false;
+        licensePlateInput.value = '';
+    }
+}
+
+// ✅ ฟังก์ชันแสดง/ซ่อนรายละเอียดพาหนะอื่นๆ (ฟอร์มแก้ไข)
+function toggleEditPublicVehicleDetails() {
+    const publicDetails = document.getElementById('edit-public-vehicle-details');
+    const otherVehicleInput = document.getElementById('edit-other-vehicle');
+    
+    if (this.checked) {
+        publicDetails.classList.remove('hidden');
+        otherVehicleInput.required = true;
+    } else {
+        publicDetails.classList.add('hidden');
+        otherVehicleInput.required = false;
+        otherVehicleInput.value = '';
+    }
+}
+
+// ✅ ฟังก์ชันดึงข้อมูลพาหนะจากฟอร์มสร้างคำขอ
+function getVehicleDataFromForm() {
+    const selectedVehicles = [];
+    const vehicleDetails = {};
+    
+    // ตรวจสอบพาหนะที่ถูกเลือก
+    if (document.getElementById('vehicle_gov')?.checked) {
+        selectedVehicles.push('gov');
+    }
+    
+    if (document.getElementById('vehicle_private')?.checked) {
+        selectedVehicles.push('private');
+        vehicleDetails.licensePlate = document.getElementById('form-license-plate').value.trim();
+    }
+    
+    if (document.getElementById('vehicle_public')?.checked) {
+        selectedVehicles.push('public');
+        vehicleDetails.otherVehicle = document.getElementById('form-other-vehicle').value.trim();
+    }
+    
+    return {
+        vehicleOptions: selectedVehicles,
+        vehicleDetails: vehicleDetails
+    };
+}
+
+// ✅ ฟังก์ชันดึงข้อมูลพาหนะจากฟอร์มแก้ไข
+function getEditVehicleDataFromForm() {
+    const selectedVehicles = [];
+    const vehicleDetails = {};
+    
+    // ตรวจสอบพาหนะที่ถูกเลือก
+    if (document.getElementById('edit-vehicle_gov')?.checked) {
+        selectedVehicles.push('gov');
+    }
+    
+    if (document.getElementById('edit-vehicle_private')?.checked) {
+        selectedVehicles.push('private');
+        vehicleDetails.licensePlate = document.getElementById('edit-license-plate').value.trim();
+    }
+    
+    if (document.getElementById('edit-vehicle_public')?.checked) {
+        selectedVehicles.push('public');
+        vehicleDetails.otherVehicle = document.getElementById('edit-other-vehicle').value.trim();
+    }
+    
+    return {
+        vehicleOptions: selectedVehicles,
+        vehicleDetails: vehicleDetails
+    };
+}
+
+// ✅ ฟังก์ชันเติมข้อมูลพาหนะในฟอร์มแก้ไข
+function fillEditVehicleData(requestData) {
+    console.log("🚗 Filling vehicle data:", requestData);
+    
+    // รีเซ็ตค่าทั้งหมดก่อน
+    document.querySelectorAll('input[name="edit-vehicle_option"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    
+    // ซ่อนรายละเอียดทั้งหมด
+    document.getElementById('edit-private-vehicle-details').classList.add('hidden');
+    document.getElementById('edit-public-vehicle-details').classList.add('hidden');
+    
+    // เติมข้อมูลพาหนะ
+    if (requestData.vehicleOptions && Array.isArray(requestData.vehicleOptions)) {
+        requestData.vehicleOptions.forEach(option => {
+            const checkbox = document.getElementById(`edit-vehicle_${option}`);
+            if (checkbox) {
+                checkbox.checked = true;
+                
+                // แสดงรายละเอียดถ้าจำเป็น
+                if (option === 'private') {
+                    document.getElementById('edit-private-vehicle-details').classList.remove('hidden');
+                    if (requestData.vehicleDetails?.licensePlate) {
+                        document.getElementById('edit-license-plate').value = requestData.vehicleDetails.licensePlate;
+                    }
+                }
+                
+                if (option === 'public') {
+                    document.getElementById('edit-public-vehicle-details').classList.remove('hidden');
+                    if (requestData.vehicleDetails?.otherVehicle) {
+                        document.getElementById('edit-other-vehicle').value = requestData.vehicleDetails.otherVehicle;
+                    }
+                }
+            }
+        });
+    } else {
+        // กรณีข้อมูลเก่าที่ใช้ radio button
+        const oldVehicleOption = requestData.vehicleOption || 'gov';
+        const oldCheckbox = document.getElementById(`edit-vehicle_${oldVehicleOption}`);
+        if (oldCheckbox) {
+            oldCheckbox.checked = true;
+            
+            if (oldVehicleOption === 'private' && requestData.licensePlate) {
+                document.getElementById('edit-private-vehicle-details').classList.remove('hidden');
+                document.getElementById('edit-license-plate').value = requestData.licensePlate;
+            }
+        }
+    }
+}
+
+// ✅ ฟังก์ชันแปลงข้อมูลพาหนะสำหรับแสดงผล
+function formatVehicleDisplay(vehicleData) {
+    if (!vehicleData || !vehicleData.vehicleOptions || vehicleData.vehicleOptions.length === 0) {
+        return 'ไม่ระบุ';
+    }
+    
+    const vehicleNames = {
+        'gov': 'รถยนต์ราชการ (รถโรงเรียน)',
+        'private': 'รถยนต์ส่วนตัว',
+        'public': 'พาหนะอื่นๆ'
+    };
+    
+    const displayText = vehicleData.vehicleOptions.map(option => vehicleNames[option]).join(', ');
+    
+    // เพิ่มรายละเอียดถ้ามี
+    const details = [];
+    if (vehicleData.vehicleDetails?.licensePlate) {
+        details.push(`ทะเบียน: ${vehicleData.vehicleDetails.licensePlate}`);
+    }
+    if (vehicleData.vehicleDetails?.otherVehicle) {
+        details.push(`พาหนะ: ${vehicleData.vehicleDetails.otherVehicle}`);
+    }
+    
+    if (details.length > 0) {
+        return `${displayText} (${details.join(', ')})`;
+    }
+    
+    return displayText;
+}
+// ✅ ฟังก์ชันตรวจสอบสถานะการแก้ไข
+function checkEditPageStatus() {
+    console.log("🔍 Edit Page Status Check:");
+    console.log("- currentEditRequestId:", sessionStorage.getItem('currentEditRequestId'));
+    console.log("- openEditPage function:", typeof openEditPage);
+    console.log("- populateEditForm function:", typeof populateEditForm);
+    console.log("- edit page element:", document.getElementById('edit-page'));
+    console.log("- edit form element:", document.getElementById('edit-request-form'));
+    console.log("- setupEditPageEventListeners function:", typeof setupEditPageEventListeners);
+}
+// ✅ ทำให้ฟังก์ชันพาหนะสามารถเรียกใช้จาก global scope ได้
+window.setupVehicleMultipleSelection = setupVehicleMultipleSelection;
+window.getVehicleDataFromForm = getVehicleDataFromForm;
+window.getEditVehicleDataFromForm = getEditVehicleDataFromForm;
+window.fillEditVehicleData = fillEditVehicleData;
+window.formatVehicleDisplay = formatVehicleDisplay;
+// ✅ ทำให้ฟังก์ชันสามารถเรียกใช้จาก global scope ได้
+window.openEditPage = openEditPage;
+window.openEditPageDirect = openEditPageDirect;
+window.setupEditPageEventListeners = setupEditPageEventListeners;
+window.resetEditPage = resetEditPage;
+window.checkEditPageStatus = checkEditPageStatus;
+window.addEditAttendeeField = addEditAttendeeField;
+window.toggleEditExpenseOptions = toggleEditExpenseOptions;
+window.toggleEditVehicleOptions = toggleEditVehicleOptions;
+
+// 🔧 เรียกใช้เมื่อโหลดหน้าเพื่อตรวจสอบ
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("🚀 Edit page functions loaded");
+    enhanceEditFunctionSafety();
+});
 
 // --- PROFILE FUNCTIONS ---
 
@@ -1878,6 +2279,15 @@ async function resetRequestForm() {
     document.getElementById('form-start-date').value = today;
     document.getElementById('form-end-date').value = today;
     
+    // ✅ รีเซ็ตข้อมูลพาหนะ
+    document.querySelectorAll('input[name="vehicle_option"]').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    document.getElementById('private-vehicle-details').classList.add('hidden');
+    document.getElementById('public-vehicle-details').classList.add('hidden');
+    document.getElementById('form-license-plate').value = '';
+    document.getElementById('form-other-vehicle').value = '';
+    
     document.getElementById('form-department').addEventListener('change', (e) => {
         const selectedDept = e.target.value;
         document.getElementById('form-head-name').value = specialPositionMap[selectedDept] || '';
@@ -1947,6 +2357,15 @@ async function handleRequestFormSubmit(e) {
         return;
     }
 
+    // ✅ ดึงข้อมูลพาหนะแบบใหม่
+    const vehicleData = getVehicleDataFromForm();
+    
+    // ✅ ตรวจสอบว่ามีการเลือกพาหนะอย่างน้อย 1 อย่าง
+    if (vehicleData.vehicleOptions.length === 0) {
+        showAlert('ข้อมูลไม่ครบถ้วน', 'กรุณาเลือกพาหนะอย่างน้อย 1 ชนิด');
+        return;
+    }
+
     const formData = {
         username: user.username,
         docDate: document.getElementById('form-doc-date').value,
@@ -1970,8 +2389,9 @@ async function handleRequestFormSubmit(e) {
         expenseOption: document.querySelector('input[name="expense_option"]:checked').value,
         expenseItems: [],
         totalExpense: document.getElementById('form-total-expense').value || 0,
-        vehicleOption: document.querySelector('input[name="vehicle_option"]:checked').value,
-        licensePlate: document.getElementById('form-license-plate').value,
+        // ✅ ใช้ข้อมูลพาหนะแบบใหม่แทน vehicleOption เดิม
+        vehicleOptions: vehicleData.vehicleOptions,
+        vehicleDetails: vehicleData.vehicleDetails,
         department: document.getElementById('form-department').value,
         headName: document.getElementById('form-head-name').value,
         isEdit: false
@@ -2739,8 +3159,8 @@ function renderAdminRequestsList(requests) {
                                 ${request.commandPdfUrlGroupLarge ? `<a href="${request.commandPdfUrlGroupLarge}" target="_blank" class="btn bg-blue-500 text-white btn-sm">คำสั่งกลุ่มใหญ่</a>` : ''}
                             </div>
                         ` : `
-                            <button onclick="openCommandApproval('${request.id}')" 
-                                    class="btn bg-green-500 text-white btn-sm">
+                            <button data-request-id="${request.id}" 
+                                    class="btn bg-green-500 text-white btn-sm command-button">
                                 ออกคำสั่ง
                             </button>
                         `}
@@ -2750,7 +3170,7 @@ function renderAdminRequestsList(requests) {
                                 ดูหนังสือส่ง
                             </a>
                         ` : `
-                            <button onclick="openDispatchModal('${request.id}')" 
+                            <button data-request-id="${request.id}" 
                                     class="btn bg-orange-500 text-white btn-sm dispatch-button">
                                 ออกหนังสือส่ง
                             </button>
@@ -2761,16 +3181,30 @@ function renderAdminRequestsList(requests) {
         `;
     }).join('');
 
+    // ✅ เพิ่ม Event Listeners สำหรับปุ่มต่างๆ หลังจาก render
     setTimeout(() => {
+        // ปุ่มออกหนังสือส่ง
         const dispatchButtons = document.querySelectorAll('.dispatch-button');
         console.log(`🔍 Found ${dispatchButtons.length} dispatch buttons`);
         
         dispatchButtons.forEach(button => {
             button.addEventListener('click', function() {
-                const requestId = this.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+                const requestId = this.getAttribute('data-request-id');
                 console.log("🖱️ Dispatch button clicked for:", requestId);
                 if (requestId) {
                     openDispatchModal(requestId);
+                }
+            });
+        });
+        
+        // ปุ่มออกคำสั่ง
+        const commandButtons = document.querySelectorAll('.command-button');
+        commandButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const requestId = this.getAttribute('data-request-id');
+                console.log("🖱️ Command button clicked for:", requestId);
+                if (requestId) {
+                    openCommandApproval(requestId);
                 }
             });
         });
@@ -2844,13 +3278,19 @@ function openCommandApproval(requestId) {
     document.getElementById('command-approval-modal').style.display = 'flex';
 }
 
-// ฟังก์ชันเปิด Modal ส่งหนังสือส่ง
+// ✅ ฟังก์ชันเปิด Modal ส่งหนังสือส่ง (เวอร์ชันแก้ไข)
 function openDispatchModal(requestId) {
     console.log("🔧 openDispatchModal called with requestId:", requestId);
     
     if (!checkAdminAccess()) {
         console.error("❌ Admin access denied");
         showAlert('ผิดพลาด', 'คุณไม่มีสิทธิ์ใช้งานฟังก์ชันนี้');
+        return;
+    }
+    
+    if (!requestId) {
+        console.error("❌ No requestId provided");
+        showAlert('ผิดพลาด', 'ไม่พบรหัสคำขอ');
         return;
     }
     
@@ -2870,15 +3310,111 @@ function openDispatchModal(requestId) {
         return;
     }
     
+    // ตั้งค่าข้อมูลในฟอร์ม
     requestIdInput.value = requestId;
     
+    // ตั้งค่าปีปัจจุบัน (พ.ศ.)
     const currentYear = new Date().getFullYear() + 543;
     yearInput.value = currentYear;
     
+    // รีเซ็ตค่าอื่นๆ
+    document.getElementById('dispatch-month').value = '';
+    document.getElementById('command-count').value = '';
+    document.getElementById('memo-count').value = '';
+    
+    // แสดง modal
     modal.style.display = 'flex';
-    console.log("✅ Dispatch modal opened successfully");
+    modal.classList.remove('hidden');
+    
+    console.log("✅ Dispatch modal opened successfully for request:", requestId);
+}
+// ✅ ฟังก์ชันตรวจสอบสถานะ Modal หนังสือส่ง
+function checkDispatchModalStatus() {
+    console.log("🔍 Dispatch Modal Status Check:");
+    
+    const modal = document.getElementById('dispatch-modal');
+    const form = document.getElementById('dispatch-form');
+    const requestIdInput = document.getElementById('dispatch-request-id');
+    
+    console.log("Modal element:", modal);
+    console.log("Modal display style:", modal?.style.display);
+    console.log("Modal class list:", modal?.classList);
+    console.log("Form element:", form);
+    console.log("Request ID input:", requestIdInput);
+    
+    // ตรวจสอบ Event Listeners
+    const submitButton = document.getElementById('dispatch-submit-button');
+    console.log("Submit button:", submitButton);
+    
+    if (submitButton) {
+        const hasEventListener = !!submitButton.onclick;
+        console.log("Submit button has click event:", hasEventListener);
+    }
+    
+    // ตรวจสอบปุ่มปิด modal
+    const closeButton = document.getElementById('dispatch-modal-close-button');
+    const cancelButton = document.getElementById('dispatch-cancel-button');
+    console.log("Close button:", closeButton);
+    console.log("Cancel button:", cancelButton);
 }
 
+// ✅ ฟังก์ชันซ่อมแซม Modal หนังสือส่ง
+function repairDispatchModal() {
+    console.log("🔧 Repairing dispatch modal...");
+    
+    const modal = document.getElementById('dispatch-modal');
+    const form = document.getElementById('dispatch-form');
+    
+    if (!modal || !form) {
+        console.error("❌ Modal or form not found");
+        return false;
+    }
+    
+    // ลบ event listeners เดิม
+    const newForm = form.cloneNode(true);
+    form.parentNode.replaceChild(newForm, form);
+    
+    // เพิ่ม event listeners ใหม่
+    document.getElementById('dispatch-form').addEventListener('submit', handleDispatchFormSubmit);
+    
+    // เพิ่ม event listeners สำหรับปุ่มปิด
+    const closeButton = document.getElementById('dispatch-modal-close-button');
+    const cancelButton = document.getElementById('dispatch-cancel-button');
+    
+    if (closeButton) {
+        closeButton.addEventListener('click', () => {
+            document.getElementById('dispatch-modal').style.display = 'none';
+        });
+    }
+    
+    if (cancelButton) {
+        cancelButton.addEventListener('click', () => {
+            document.getElementById('dispatch-modal').style.display = 'none';
+        });
+    }
+    
+    console.log("✅ Dispatch modal repaired successfully");
+    return true;
+}
+// ✅ ฟังก์ชันทดสอบ Modal หนังสือส่ง
+function testDispatchModal() {
+    console.log("🧪 Testing Dispatch Modal...");
+    
+    // ตรวจสอบ element ต่างๆ
+    checkDispatchModalStatus();
+    
+    // พยายามเปิด modal ด้วย requestId ตัวอย่าง
+    const sampleRequest = allRequestsCache[0];
+    if (sampleRequest) {
+        console.log("🔄 Trying to open modal with sample request:", sampleRequest.id);
+        openDispatchModal(sampleRequest.id);
+    } else {
+        console.log("ℹ️ No sample request available for testing");
+    }
+    
+    // พยายามซ่อมแซม modal
+    repairDispatchModal();
+}
 // ฟังก์ชันเปิด Modal จัดการบันทึกข้อความ
 function openAdminMemoAction(memoId) {
     if (!checkAdminAccess()) {
@@ -3262,23 +3798,3 @@ function testDispatchSystem() {
         currentUser: getCurrentUser()
     });
 }
-
-// ✅ ทำให้ฟังก์ชันสามารถเรียกใช้จาก global scope ได้
-window.openEditPage = openEditPage;
-window.openEditPageDirect = openEditPageDirect;
-window.handleRequestAction = handleRequestAction;
-window.deleteUser = deleteUser;
-window.checkEditPageStatus = checkEditPageStatus;
-window.openDispatchModal = openDispatchModal;
-window.openCommandApproval = openCommandApproval;
-window.handleDispatchFormSubmit = handleDispatchFormSubmit;
-window.testDispatchSystem = testDispatchSystem;
-window.testLoadEditData = testLoadEditData;
-
-// 🔧 เรียกใช้เมื่อโหลดหน้าเพื่อตรวจสอบ
-setTimeout(() => {
-    console.log("🚀 Dispatch system initialized");
-}, 1000);
-
-// เรียกใช้เมื่อโหลดหน้า
-enhanceEditFunctionSafety();
