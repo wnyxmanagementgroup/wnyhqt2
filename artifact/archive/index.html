@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>คลังข้อมูลไปราชการ</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Sarabun',Arial,sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh}
+
+  .header{background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;padding:20px 24px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+  .header-logo{width:44px;height:44px;background:rgba(255,255,255,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+  .header-title{font-size:20px;font-weight:700}
+  .header-sub{font-size:13px;opacity:.8;margin-top:2px}
+
+  .controls{background:#fff;padding:14px 24px;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:sticky;top:0;z-index:10;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  .controls select,.controls input{height:38px;border:1px solid #d1d5db;border-radius:8px;padding:0 12px;font-size:14px;font-family:inherit;background:#fff;color:#374151;outline:none;transition:border-color .2s}
+  .controls select:focus,.controls input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+  #search-input{min-width:220px;flex:1}
+  .btn-load{height:38px;padding:0 18px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .2s;display:flex;align-items:center;gap:6px}
+  .btn-load:hover{background:#1d4ed8}
+  .btn-load:disabled{background:#93c5fd;cursor:not-allowed}
+  .badge{background:#eff6ff;color:#1d4ed8;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600;white-space:nowrap}
+
+  .stats-bar{display:flex;gap:12px;padding:14px 24px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-wrap:wrap}
+  .stat-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 16px;display:flex;align-items:center;gap:10px;min-width:130px}
+  .stat-num{font-size:22px;font-weight:700;color:#1e3a5f;line-height:1}
+  .stat-label{font-size:12px;color:#64748b;margin-top:3px}
+
+  .table-wrap{padding:20px 24px}
+  table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);border:1px solid #e2e8f0}
+  thead tr{background:#1e3a5f}
+  th{padding:10px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#fff;white-space:nowrap}
+  td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#f0f7ff;cursor:pointer}
+  tbody tr.row-complete{background:rgba(220,252,231,.3)}
+  tbody tr.row-complete:hover{background:rgba(220,252,231,.6)}
+
+  /* status badge */
+  .sbadge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;white-space:nowrap}
+  .s-done{background:#dcfce7;color:#166534}
+  .s-progress{background:#fef9c3;color:#854d0e}
+  .s-pending{background:#f1f5f9;color:#475569}
+  .s-rejected{background:#fee2e2;color:#991b1b}
+
+  /* file chips in table */
+  .chip{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:12px;white-space:nowrap}
+  .chip-blue{background:#eff6ff;color:#1d4ed8}
+  .chip-green{background:#f0fdf4;color:#166534}
+  .chip-purple{background:#fdf4ff;color:#7c3aed}
+  .chip-amber{background:#fffbeb;color:#92400e}
+
+  /* empty/loading */
+  .state-msg{text-align:center;padding:60px 20px;color:#94a3b8}
+  .state-msg .icon{font-size:48px;margin-bottom:12px}
+  .state-msg p{font-size:15px}
+  .loader-ring{width:36px;height:36px;border:4px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ===== DETAIL MODAL ===== */
+  #detail-modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:1000;align-items:center;justify-content:center;padding:16px}
+  #detail-modal.open{display:flex}
+  .modal-box{background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.25);width:100%;max-width:620px;max-height:90vh;overflow-y:auto;animation:fadeUp .2s ease}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  .modal-header{background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;padding:18px 22px;border-radius:16px 16px 0 0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .modal-header-id{font-size:20px;font-weight:700;line-height:1.2}
+  .modal-header-name{font-size:13px;opacity:.85;margin-top:4px}
+  .modal-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background .2s}
+  .modal-close:hover{background:rgba(255,255,255,.3)}
+  .modal-body{padding:20px 22px}
+  .modal-section{margin-bottom:20px}
+  .modal-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid #f1f5f9}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}
+  .info-item label{font-size:11px;color:#94a3b8;display:block;margin-bottom:2px}
+  .info-item span{font-size:13px;font-weight:500;color:#1e293b}
+  .doc-card{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:8px;text-decoration:none;color:inherit;transition:all .15s}
+  .doc-card:hover{border-color:#3b82f6;background:#f0f7ff;transform:translateX(3px)}
+  .doc-card.green{border-color:#bbf7d0}.doc-card.green:hover{border-color:#16a34a;background:#f0fdf4}
+  .doc-card.purple{border-color:#e9d5ff}.doc-card.purple:hover{border-color:#7c3aed;background:#fdf4ff}
+  .doc-card.amber{border-color:#fde68a}.doc-card.amber:hover{border-color:#d97706;background:#fffbeb}
+  .doc-icon{font-size:22px;flex-shrink:0}
+  .doc-info{flex:1;min-width:0}
+  .doc-label{font-size:13px;font-weight:700;color:#1e293b}
+  .doc-desc{font-size:11px;color:#64748b;margin-top:2px}
+  .doc-arrow{font-size:14px;color:#94a3b8;flex-shrink:0}
+  .no-doc{text-align:center;padding:20px;color:#cbd5e1;font-size:13px;border:2px dashed #e2e8f0;border-radius:10px}
+  .modal-footer{padding:0 22px 18px;display:flex;justify-content:flex-end}
+  .btn-close-footer{height:36px;padding:0 20px;background:#f1f5f9;color:#374151;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .2s}
+  .btn-close-footer:hover{background:#e2e8f0}
+
+  @media(max-width:640px){
+    .header-title{font-size:16px}
+    .table-wrap{padding:12px}
+    .controls{padding:12px}
+    .stats-bar{padding:10px 12px}
+    .stat-card{min-width:100px}
+    .info-grid{grid-template-columns:1fr}
+    .modal-box{max-height:95vh}
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">📚</div>
+  <div>
+    <div class="header-title">คลังข้อมูลไปราชการ</div>
+    <div class="header-sub">ค้นหาและดาวน์โหลดเอกสารย้อนหลัง</div>
+  </div>
+</div>
+
+<div class="controls">
+  <select id="year-select"></select>
+  <input type="text" id="search-input" placeholder="🔍 ค้นหา (ชื่อ / เลขที่ / สถานที่ / วัตถุประสงค์)...">
+  <select id="status-filter">
+    <option value="">— สถานะทั้งหมด —</option>
+    <option value="เสร็จสิ้น">เสร็จสิ้น</option>
+    <option value="รับไฟล์">รับไฟล์แล้ว</option>
+    <option value="กำลังดำเนินการ">กำลังดำเนินการ</option>
+    <option value="รอ">รอดำเนินการ</option>
+    <option value="ตีกลับ">ตีกลับ</option>
+  </select>
+  <button class="btn-load" id="load-btn" onclick="loadData()">
+    <span id="load-icon">🔄</span> <span id="load-text">โหลดข้อมูล</span>
+  </button>
+  <span class="badge" id="count-badge" style="display:none"></span>
+</div>
+
+<div class="stats-bar" id="stats-bar" style="display:none">
+  <div class="stat-card"><span style="font-size:20px">📋</span>
+    <div><div class="stat-num" id="s-total">0</div><div class="stat-label">รายการทั้งหมด</div></div>
+  </div>
+  <div class="stat-card"><span style="font-size:20px">✅</span>
+    <div><div class="stat-num" id="s-done">0</div><div class="stat-label">เสร็จสิ้น</div></div>
+  </div>
+  <div class="stat-card"><span style="font-size:20px">📁</span>
+    <div><div class="stat-num" id="s-files">0</div><div class="stat-label">มีไฟล์สุดท้าย</div></div>
+  </div>
+  <div class="stat-card"><span style="font-size:20px">⏳</span>
+    <div><div class="stat-num" id="s-pending">0</div><div class="stat-label">ยังดำเนินการ</div></div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <div id="state-area" class="state-msg">
+    <div class="icon">📂</div>
+    <p>เลือกปี แล้วกด "โหลดข้อมูล" เพื่อแสดงรายการ</p>
+  </div>
+  <div id="table-area" style="display:none">
+    <table>
+      <thead>
+        <tr>
+          <th>เลขที่</th>
+          <th>ชื่อผู้ขอ</th>
+          <th>วัตถุประสงค์</th>
+          <th>สถานที่</th>
+          <th>วันเดินทาง</th>
+          <th>สถานะ</th>
+          <th>เอกสารสุดท้าย</th>
+          <th style="text-align:center">รายละเอียด</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+    <div id="no-result" class="state-msg" style="display:none">
+      <div class="icon">🔍</div>
+      <p>ไม่พบรายการที่ตรงกับการค้นหา</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===== DETAIL MODAL ===== -->
+<div id="detail-modal" onclick="handleModalClick(event)">
+  <div class="modal-box" id="modal-box">
+    <div class="modal-header">
+      <div>
+        <div class="modal-header-id" id="m-id">—</div>
+        <div class="modal-header-name" id="m-name">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- ข้อมูลทั่วไป -->
+      <div class="modal-section">
+        <div class="modal-section-title">ข้อมูลคำขอ</div>
+        <div class="info-grid">
+          <div class="info-item"><label>วัตถุประสงค์</label><span id="m-purpose">—</span></div>
+          <div class="info-item"><label>สถานที่</label><span id="m-location">—</span></div>
+          <div class="info-item"><label>วันที่เดินทาง</label><span id="m-dates">—</span></div>
+          <div class="info-item"><label>สถานะ</label><span id="m-status">—</span></div>
+          <div class="info-item"><label>สถานะคำสั่ง</label><span id="m-cmdstatus">—</span></div>
+          <div class="info-item"><label>วันที่เอกสาร</label><span id="m-docdate">—</span></div>
+        </div>
+      </div>
+      <!-- เอกสารสุดท้าย (ไฟล์แอดมินอัพโหลด) -->
+      <div class="modal-section">
+        <div class="modal-section-title">📥 เอกสารสุดท้าย — ไฟล์ที่แอดมินอัพโหลดให้</div>
+        <div id="m-final-docs"></div>
+      </div>
+      <!-- เอกสารต้นทาง (ไฟล์ที่ระบบสร้าง) -->
+      <div class="modal-section" id="m-origin-section">
+        <div class="modal-section-title">📄 เอกสารต้นทาง — ไฟล์ที่ระบบสร้างอัตโนมัติ</div>
+        <div id="m-origin-docs"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-close-footer" onclick="closeModal()">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxHffk5rLHflg669FsZysd8GUPe490NzSvCeRToOra_F3G4TtAfxU2ldVZxcPqsSEZo/exec';
+let allData = [];
+
+// ====== INIT ======
+(function init() {
+  const sel = document.getElementById('year-select');
+  const curBE = new Date().getFullYear() + 543;
+  for (let y = curBE; y >= curBE - 6; y--) {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = 'ปี พ.ศ. ' + y;
+    if (y === curBE) o.selected = true;
+    sel.appendChild(o);
+  }
+  const urlYear = new URLSearchParams(window.location.search).get('year');
+  if (urlYear) { sel.value = urlYear; loadData(); }
+  document.getElementById('search-input').addEventListener('input', renderTable);
+  document.getElementById('status-filter').addEventListener('change', renderTable);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+})();
+
+// ====== LOAD ======
+async function loadData() {
+  const year = document.getElementById('year-select').value;
+  const btn  = document.getElementById('load-btn');
+  btn.disabled = true;
+  document.getElementById('load-icon').innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle"></span>';
+  document.getElementById('load-text').textContent = 'กำลังโหลด...';
+  document.getElementById('state-area').innerHTML = '<div class="loader-ring"></div><p>กำลังโหลดข้อมูล...</p>';
+  document.getElementById('state-area').style.display = 'block';
+  document.getElementById('table-area').style.display  = 'none';
+  document.getElementById('stats-bar').style.display   = 'none';
+  document.getElementById('count-badge').style.display = 'none';
+  try {
+    const res  = await fetch(GAS_URL + '?action=getArchiveRequests&year=' + year + '&t=' + Date.now(), { redirect: 'follow' });
+    const json = await res.json();
+    if (json.status !== 'success') throw new Error(json.message || 'โหลดข้อมูลไม่สำเร็จ');
+    allData = json.data || [];
+    renderTable();
+    updateStats();
+  } catch(e) {
+    document.getElementById('state-area').innerHTML = '<div class="icon">⚠️</div><p>เกิดข้อผิดพลาด: ' + esc(e.message) + '</p>';
+  } finally {
+    btn.disabled = false;
+    document.getElementById('load-icon').textContent = '🔄';
+    document.getElementById('load-text').textContent = 'โหลดใหม่';
+  }
+}
+
+// ====== STATS ======
+function updateStats() {
+  const done    = allData.filter(r => isDone(r)).length;
+  // ไฟล์สุดท้าย = ไฟล์ที่แอดมินอัพโหลด (adminMemoUrl / completedCommandUrl / dispatchBookUrl)
+  const hasFile = allData.filter(r => r.adminMemoUrl || r.completedCommandUrl || r.dispatchBookUrl || r.completedMemoUrl).length;
+  const pending = Math.max(0, allData.length - done);
+  document.getElementById('s-total').textContent   = allData.length;
+  document.getElementById('s-done').textContent    = done;
+  document.getElementById('s-files').textContent   = hasFile;
+  document.getElementById('s-pending').textContent = pending;
+  document.getElementById('stats-bar').style.display = 'flex';
+}
+
+function isDone(r) {
+  return r.status && (r.status.includes('เสร็จสิ้น') || r.status.includes('รับไฟล์'));
+}
+
+// ====== RENDER TABLE ======
+function renderTable() {
+  const q      = document.getElementById('search-input').value.toLowerCase().trim();
+  const stFilt = document.getElementById('status-filter').value.toLowerCase();
+  const filtered = allData.filter(r => {
+    if (stFilt && !(r.status || '').toLowerCase().includes(stFilt)) return false;
+    if (!q) return true;
+    return (r.id + r.requesterName + r.purpose + r.location + r.docDate).toLowerCase().includes(q);
+  });
+
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+  if (!filtered.length) {
+    document.getElementById('table-area').style.display = 'block';
+    document.getElementById('state-area').style.display = 'none';
+    document.getElementById('no-result').style.display  = 'block';
+    document.getElementById('count-badge').style.display = 'none';
+    return;
+  }
+  document.getElementById('no-result').style.display   = 'none';
+  document.getElementById('table-area').style.display  = 'block';
+  document.getElementById('state-area').style.display  = 'none';
+  document.getElementById('count-badge').style.display = 'inline-block';
+  document.getElementById('count-badge').textContent   = filtered.length + ' รายการ';
+
+  filtered.forEach((r, idx) => {
+    // ---- คอลัมน์ "เอกสารสุดท้าย" แสดงเฉพาะ chip บอกว่ามีไฟล์อะไรบ้าง ----
+    const chips = [];
+    // 1. บันทึกข้อความ: adminMemoUrl ก่อน ถ้าไม่มีใช้ completedMemoUrl
+    const memoFinal = r.adminMemoUrl || r.completedMemoUrl;
+    if (memoFinal) chips.push('<span class="chip chip-green">📩 บันทึก</span>');
+    // 2. คำสั่งไปราชการ
+    if (r.completedCommandUrl) chips.push('<span class="chip chip-purple">📋 คำสั่ง</span>');
+    // 3. หนังสือส่ง
+    if (r.dispatchBookUrl) chips.push('<span class="chip chip-amber">📦 หนังสือส่ง</span>');
+
+    const tr = document.createElement('tr');
+    if (isDone(r)) tr.className = 'row-complete';
+    tr.onclick = () => openModal(r);
+    tr.title   = 'คลิกเพื่อดูรายละเอียด';
+    tr.innerHTML =
+      '<td style="white-space:nowrap;font-weight:700;color:#1e3a5f">' + esc(r.id) + '</td>'
+    + '<td>' + esc(r.requesterName) + '</td>'
+    + '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.purpose) + '</td>'
+    + '<td style="white-space:nowrap">' + esc(r.location) + '</td>'
+    + '<td style="white-space:nowrap;font-size:12px;color:#475569">' + formatDateRange(r.startDate, r.endDate) + '</td>'
+    + '<td>' + statusBadge(r.status) + '</td>'
+    + '<td>' + (chips.length ? '<div style="display:flex;flex-wrap:wrap;gap:4px">' + chips.join('') + '</div>'
+                              : '<span style="color:#cbd5e1;font-size:12px">—</span>') + '</td>'
+    + '<td style="text-align:center"><button onclick="event.stopPropagation();openModal(allData[' + allData.indexOf(r) + '])" '
+    + 'style="background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">ดู ↗</button></td>';
+    tbody.appendChild(tr);
+  });
+}
+
+// ====== MODAL ======
+function openModal(r) {
+  // Header
+  document.getElementById('m-id').textContent   = r.id || '—';
+  document.getElementById('m-name').textContent = r.requesterName || '—';
+  document.getElementById('m-purpose').textContent  = r.purpose  || '—';
+  document.getElementById('m-location').textContent = r.location || '—';
+  document.getElementById('m-dates').textContent    = formatDateRange(r.startDate, r.endDate) || '—';
+  document.getElementById('m-docdate').textContent  = thDate(r.docDate) || '—';
+  document.getElementById('m-cmdstatus').innerHTML  = r.commandStatus ? statusBadge(r.commandStatus) : '<span style="color:#cbd5e1">—</span>';
+  document.getElementById('m-status').innerHTML     = statusBadge(r.status);
+
+  // ---- เอกสารสุดท้าย (ไฟล์แอดมินอัพโหลด) ----
+  const finalDocs = [];
+
+  // บันทึกข้อความ: adminMemoUrl คือไฟล์ที่แอดมินให้ผู้ใช้, completedMemoUrl คือที่ผู้ใช้ส่งมา
+  if (r.adminMemoUrl) {
+    finalDocs.push(docCard(r.adminMemoUrl, '📩', 'บันทึกข้อความ (แอดมินอัพโหลดให้)', 'ไฟล์ฉบับสมบูรณ์จากแอดมิน', 'green'));
+  } else if (r.completedMemoUrl) {
+    finalDocs.push(docCard(r.completedMemoUrl, '📄', 'บันทึกข้อความ (ผู้ใช้ส่ง)', 'ไฟล์ที่ผู้ใช้ส่งเพื่อขออนุมัติ', 'green'));
+  }
+  if (r.completedCommandUrl) {
+    finalDocs.push(docCard(r.completedCommandUrl, '📋', 'คำสั่งไปราชการ', 'คำสั่งฉบับอนุมัติแล้ว', 'purple'));
+  }
+  if (r.dispatchBookUrl) {
+    finalDocs.push(docCard(r.dispatchBookUrl, '📦', 'หนังสือส่ง', 'หนังสือนำส่งเอกสาร', 'amber'));
+  }
+  document.getElementById('m-final-docs').innerHTML = finalDocs.length
+    ? finalDocs.join('')
+    : '<div class="no-doc">ยังไม่มีไฟล์สุดท้ายจากแอดมิน</div>';
+
+  // ---- เอกสารต้นทาง (ไฟล์ระบบสร้าง) ----
+  const originDocs = [];
+  if (r.pdfUrl && r.pdfUrl !== r.adminMemoUrl && r.pdfUrl !== r.completedMemoUrl) {
+    originDocs.push(docCard(r.pdfUrl, '📄', 'บันทึก (ระบบสร้าง)', 'ไฟล์บันทึกที่ระบบสร้างอัตโนมัติ', ''));
+  }
+  const originSection = document.getElementById('m-origin-section');
+  if (originDocs.length) {
+    document.getElementById('m-origin-docs').innerHTML = originDocs.join('');
+    originSection.style.display = '';
+  } else {
+    originSection.style.display = 'none';
+  }
+
+  document.getElementById('detail-modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+  document.getElementById('detail-modal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function handleModalClick(e) {
+  if (e.target === document.getElementById('detail-modal')) closeModal();
+}
+
+function docCard(url, icon, label, desc, cls) {
+  return '<a href="' + esc(url) + '" target="_blank" class="doc-card ' + cls + '" onclick="event.stopPropagation()">'
+    + '<span class="doc-icon">' + icon + '</span>'
+    + '<div class="doc-info"><div class="doc-label">' + label + '</div><div class="doc-desc">' + desc + '</div></div>'
+    + '<span class="doc-arrow">↗</span>'
+    + '</a>';
+}
+
+// ====== HELPERS ======
+function esc(t) {
+  if (!t) return '';
+  return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function statusBadge(s) {
+  if (!s) return '<span class="sbadge s-pending">ไม่ระบุ</span>';
+  if (s.includes('เสร็จสิ้น') || s.includes('รับไฟล์')) return '<span class="sbadge s-done">' + esc(s) + '</span>';
+  if (s.includes('ตีกลับ') || s.includes('แก้ไข') || s.includes('ปฏิเสธ')) return '<span class="sbadge s-rejected">' + esc(s) + '</span>';
+  if (s.includes('รอ') || s.includes('กำลัง') || s.includes('Submitted') || s.includes('Pending')) return '<span class="sbadge s-progress">' + esc(s) + '</span>';
+  return '<span class="sbadge s-pending">' + esc(s) + '</span>';
+}
+function formatDateRange(start, end) {
+  if (!start && !end) return '—';
+  if (!end || start === end) return thDate(start);
+  return thDate(start) + ' – ' + thDate(end);
+}
+function thDate(d) {
+  if (!d) return '';
+  try {
+    const dt = new Date(d);
+    if (isNaN(dt)) return d;
+    return dt.getDate() + '/' + (dt.getMonth()+1) + '/' + (dt.getFullYear()+543);
+  } catch { return d; }
+}
+</script>
+</body>
+</html>

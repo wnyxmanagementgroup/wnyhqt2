@@ -1,0 +1,534 @@
+{
+  "auditMeta": {
+    "projectName": "WNY HQ App — ระบบบันทึกข้อความไปราชการ",
+    "auditDate": "2026-04-09",
+    "auditor": "Claude Code (Automated Audit)",
+    "branch": "claude/debug-website-audit-wt5As",
+    "repository": "wnyxmanagementgroup/wnyhq2",
+    "version": "1.0.0",
+    "auditType": "Full Codebase Audit"
+  },
+
+  "projectOverview": {
+    "type": "Single Page Application (SPA)",
+    "purpose": "Thai government school business trip request management system",
+    "language": "Vanilla JavaScript (ES6+)",
+    "frontend": "HTML5 + Tailwind CSS (CDN)",
+    "backend": {
+      "primary": "Google Apps Script (GAS)",
+      "secondary": "Firebase Firestore + Firebase Auth",
+      "pdfEngine": "Cloud Run (LibreOffice convert)"
+    },
+    "hosting": "Static web hosting",
+    "totalLines": 14492,
+    "totalFiles": 13
+  },
+
+  "fileInventory": [
+    { "file": "index.html",         "lines": 2173, "role": "SPA shell, all page views embedded" },
+    { "file": "js/config.js",       "lines": 140,  "role": "Firebase config, GAS URL, role/status mappings" },
+    { "file": "js/utils.js",        "lines": 258,  "role": "API wrapper, modal helpers, PDF merge, formatters" },
+    { "file": "js/auth.js",         "lines": 466,  "role": "Login, logout, session, profile, password, announcements" },
+    { "file": "js/firebaseService.js","lines": 169, "role": "Hybrid submit/command flows using Firebase+GAS" },
+    { "file": "js/main.js",         "lines": 2597, "role": "Page navigation, event listeners, dashboard, send-memo" },
+    { "file": "js/requests.js",     "lines": 3176, "role": "New request form, edit form, Excel import, submission" },
+    { "file": "js/admin.js",        "lines": 2526, "role": "Admin: command gen, memo mgmt, user mgmt, sync" },
+    { "file": "js/stats.js",        "lines": 385,  "role": "Chart.js statistics and analytics" },
+    { "file": "js/signature.js",    "lines": 538,  "role": "PDF viewer, drag-drop signature placement, approve" },
+    { "file": "js/sarabun.js",      "lines": 693,  "role": "Saraban office stamp on PDF" },
+    { "file": "js/tokenSign.js",    "lines": 638,  "role": "Token-based approval (no login required)" },
+    { "file": "css/style.css",      "lines": 733,  "role": "Custom styles, glassmorphism, sidebar, animations" }
+  ],
+
+  "scriptLoadOrder": [
+    "firebase-app-compat.js",
+    "firebase-firestore-compat.js",
+    "firebase-auth-compat.js",
+    "firebase-storage-compat.js",
+    "pizzip.js",
+    "docxtemplater.js",
+    "pdf-lib.min.js",
+    "signature_pad.umd.min.js",
+    "fontkit.umd.min.js",
+    "pdf.min.js",
+    "js/config.js",
+    "js/utils.js",
+    "js/firebaseService.js",
+    "js/auth.js",
+    "js/requests.js",
+    "js/admin.js",
+    "js/stats.js",
+    "js/tokenSign.js",
+    "js/main.js",
+    "js/sarabun.js",
+    "js/signature.js"
+  ],
+
+  "pages": [
+    { "id": "dashboard-page",           "title": "แดชบอร์ด",                   "access": "all",      "loader": "fetchUserRequests()" },
+    { "id": "form-page",                "title": "ร่างคำขอไปราชการ",            "access": "all",      "loader": "resetRequestForm(), tryAutoFillRequester()" },
+    { "id": "approval-page",            "title": "เอกสารรอลงนาม",               "access": "approvers","loader": "loadPendingApprovals()" },
+    { "id": "send-memo-page",           "title": "ส่งบันทึกข้อความ",             "access": "all",      "loader": "fetchPendingMemos()" },
+    { "id": "edit-page",                "title": "แก้ไขคำขอ",                   "access": "owner/admin","loader": "setupEditPageEventListeners()" },
+    { "id": "profile-page",             "title": "ข้อมูลส่วนตัว",               "access": "all",      "loader": "loadProfileData()" },
+    { "id": "stats-page",               "title": "สถิติข้อมูล",                  "access": "all",      "loader": "loadStats()" },
+    { "id": "command-generation-page",  "title": "จัดการบันทึก/คำสั่ง",         "access": "admin",    "loader": "loadAdminRequests()" },
+    { "id": "admin-users-page",         "title": "จัดการผู้ใช้",                 "access": "admin",    "loader": "fetchAllUsers()" },
+    { "id": "admin-approval-links-page","title": "จัดการลิงก์ลงนาม",             "access": "admin",    "loader": "loadApprovalLinks()" }
+  ],
+
+  "userRoles": [
+    { "role": "admin",          "access": "full",         "notes": "Admin nav items, command gen, user mgmt" },
+    { "role": "director",       "access": "approval only","notes": "Sees only approval-page after login" },
+    { "role": "saraban",        "access": "approval only","notes": "Sees only approval-page after login, stamps documents" },
+    { "role": "head_science",   "access": "approver",     "notes": "หัวหน้ากลุ่มสาระวิทยาศาสตร์" },
+    { "role": "head_math",      "access": "approver",     "notes": "หัวหน้ากลุ่มสาระคณิตศาสตร์" },
+    { "role": "head_thai",      "access": "approver",     "notes": "หัวหน้ากลุ่มสาระภาษาไทย" },
+    { "role": "head_foreign",   "access": "approver",     "notes": "หัวหน้ากลุ่มสาระภาษาต่างประเทศ" },
+    { "role": "head_social",    "access": "approver",     "notes": "หัวหน้ากลุ่มสาระสังคมศึกษา" },
+    { "role": "head_health",    "access": "approver",     "notes": "หัวหน้ากลุ่มสาระสุขศึกษา" },
+    { "role": "head_art",       "access": "approver",     "notes": "หัวหน้ากลุ่มสาระศิลปะ" },
+    { "role": "head_career",    "access": "approver",     "notes": "หัวหน้ากลุ่มสาระการงานอาชีพ" },
+    { "role": "head_guidance",  "access": "approver",     "notes": "หัวหน้างานแนะแนว" },
+    { "role": "head_general",   "access": "approver",     "notes": "หัวหน้ากลุ่มบริหารทั่วไป" },
+    { "role": "head_personnel", "access": "approver",     "notes": "หัวหน้ากลุ่มบริหารงานบุคคล" },
+    { "role": "head_budget",    "access": "approver",     "notes": "หัวหน้ากลุ่มบริหารงบประมาณ" },
+    { "role": "head_acad",      "access": "approver",     "notes": "หัวหน้ากลุ่มบริหารวิชาการ" },
+    { "role": "deputy_general", "access": "approver",     "notes": "รองผอ.กลุ่มบริหารทั่วไป" },
+    { "role": "deputy_budget",  "access": "approver",     "notes": "รองผอ.กลุ่มบริหารงบประมาณ" },
+    { "role": "deputy_acad",    "access": "approver",     "notes": "รองผอ.กลุ่มบริหารวิชาการ" },
+    { "role": "deputy_personnel","access": "approver",    "notes": "รองผอ.กลุ่มบริหารงานบุคคล" },
+    { "role": "user",           "access": "standard",     "notes": "Regular staff, can submit requests" }
+  ],
+
+  "approvalWorkflow": {
+    "description": "Multi-step document approval chain based on requester's department/position",
+    "docStatusValues": [
+      "draft",
+      "waiting_head_science", "waiting_head_math", "waiting_head_thai",
+      "waiting_head_foreign", "waiting_head_social", "waiting_head_health",
+      "waiting_head_art", "waiting_head_career", "waiting_head_guidance",
+      "waiting_head_general", "waiting_head_personnel", "waiting_head_budget", "waiting_head_acad",
+      "waiting_dep_general", "waiting_dep_budget", "waiting_dep_acad", "waiting_dep_personnel",
+      "waiting_director",
+      "waiting_admin_review",
+      "waiting_saraban",
+      "completed"
+    ],
+    "tokenLinks": {
+      "expiry": "7 days",
+      "storage": "Firestore collection: approvalLinks",
+      "oneTimeUse": true
+    }
+  },
+
+  "firestoreSchema": {
+    "requests": {
+      "docId": "safeId = requestId.replace(/[\\/\\\\:\\.]/g, '-')",
+      "fields": {
+        "id": "string — document number e.g. '123/2566'",
+        "requesterName": "string",
+        "requesterPosition": "string",
+        "location": "string",
+        "purpose": "string",
+        "startDate": "string (ISO date)",
+        "endDate": "string (ISO date)",
+        "startTime": "string",
+        "endTime": "string",
+        "attendees": "array of {name, position}",
+        "vehicleOption": "string: gov|private|public",
+        "licensePlate": "string",
+        "expenseOption": "string: no|partial",
+        "expenseItems": "array or string",
+        "totalExpense": "number",
+        "status": "string — user-facing status",
+        "docStatus": "string — approval stage key",
+        "commandStatus": "string",
+        "pdfUrl": "string — Google Drive link",
+        "fileUrl": "string",
+        "memoPdfUrl": "string",
+        "commandPdfUrl": "string",
+        "commandBookUrl": "string",
+        "dispatchBookUrl": "string",
+        "pdfBase64": "string — cached base64 for instant loading",
+        "timestamp": "Firestore ServerTimestamp",
+        "lastUpdated": "Firestore ServerTimestamp",
+        "username": "string — owner"
+      }
+    },
+    "approvalLinks": {
+      "docId": "random 16-byte hex token",
+      "fields": {
+        "requestId": "string",
+        "safeId": "string",
+        "docStatus": "string — required approval stage",
+        "docTitle": "string",
+        "requester": "string",
+        "createdAt": "Firestore ServerTimestamp",
+        "expiresAt": "ISO date string (7 days)",
+        "used": "boolean"
+      }
+    },
+    "users": {
+      "docId": "Firebase Auth UID",
+      "fields": {
+        "username": "string — primary ID",
+        "loginName": "string — login alias",
+        "fullName": "string",
+        "email": "string",
+        "position": "string",
+        "department": "string",
+        "role": "string",
+        "lastLogin": "Firestore ServerTimestamp"
+      }
+    },
+    "systemConfig": {
+      "signerPositions": {
+        "names": "object — position → fullName",
+        "usernames": "object — position → username"
+      }
+    },
+    "settings": {
+      "announcement": {
+        "isActive": "boolean",
+        "title": "string",
+        "message": "string",
+        "imageUrl": "string"
+      }
+    }
+  },
+
+  "apiEndpoints": {
+    "googleAppsScript": {
+      "url": "REDACTED (see config.js)",
+      "actions": [
+        "verifyCredentials",
+        "saveRequestAndGeneratePdf",
+        "getAllRequests",
+        "getAllMemos",
+        "getAllUsers",
+        "generateCommand",
+        "approveCommand",
+        "updateRequest",
+        "uploadGeneratedFile",
+        "getPdfBase64",
+        "updateUserProfile",
+        "registerUser",
+        "updatePassword",
+        "forgotPassword"
+      ],
+      "timeout": "30 seconds",
+      "retries": 2
+    },
+    "cloudRunPdfEngine": {
+      "url": "https://wny-pdf-engine-660310608742.asia-southeast1.run.app/",
+      "endpoint": "/forms/libreoffice/convert",
+      "method": "POST (multipart/form-data with .docx file)",
+      "timeout": 15000,
+      "templates": {
+        "memo": "template_memo.docx",
+        "command_solo": "template_command_solo.docx",
+        "command_small": "template_command_small.docx",
+        "command_large": "template_command_large.docx",
+        "dispatch": "แม่แบบหนังสือส่งใหม่.docx"
+      }
+    }
+  },
+
+  "externalDependencies": {
+    "cdnLibraries": [
+      { "name": "Tailwind CSS",     "version": "latest CDN", "url": "cdn.tailwindcss.com" },
+      { "name": "XLSX",             "version": "0.18.5",     "url": "cdnjs.cloudflare.com" },
+      { "name": "Chart.js",         "version": "3.7.1",      "url": "cdnjs.cloudflare.com" },
+      { "name": "Firebase SDK",     "version": "9.23.0",     "url": "gstatic.com" },
+      { "name": "PizZip",           "version": "3.1.4",      "url": "unpkg.com" },
+      { "name": "docxtemplater",    "version": "3.50.0",     "url": "cdnjs.cloudflare.com" },
+      { "name": "pdf-lib",          "version": "1.17.1",     "url": "unpkg.com" },
+      { "name": "signature_pad",    "version": "4.1.7",      "url": "jsdelivr.net" },
+      { "name": "fontkit",          "version": "0.0.4",      "url": "unpkg.com" },
+      { "name": "pdf.js",           "version": "2.16.105",   "url": "cdnjs.cloudflare.com" }
+    ],
+    "localAssets": [
+      { "file": "fonts/THSarabunNew.ttf",           "size": "regular" },
+      { "file": "fonts/THSarabunNew Bold.ttf",      "size": "bold" },
+      { "file": "fonts/THSarabunNew Italic.ttf",    "size": "italic" },
+      { "file": "fonts/THSarabunNew BoldItalic.ttf","size": "bold-italic" },
+      { "file": "template_memo.docx",               "size": "3.4 MB" },
+      { "file": "template_command_solo.docx",       "size": "38.6 KB" },
+      { "file": "template_command_small.docx",      "size": "38.3 KB" },
+      { "file": "template_command_large.docx",      "size": "37.8 KB" },
+      { "file": "template_travel_schedule.docx",    "size": "13.3 KB" },
+      { "file": "แม่แบบหนังสือส่งใหม่.docx",         "size": "2.7 MB" }
+    ],
+    "externalImages": [
+      { "url": "pic.in.th", "purpose": "school logo" },
+      { "url": "upload.wikimedia.org", "purpose": "favicon" }
+    ]
+  },
+
+  "bugsFound": [
+    {
+      "id": "BUG-001",
+      "severity": "critical",
+      "status": "FIXED",
+      "title": "generatePdfFromCloudRun is not defined anywhere",
+      "description": "Function generatePdfFromCloudRun() is called in requests.js:2956 and firebaseService.js:14,104 but was never defined. Causes ReferenceError at runtime.",
+      "impact": "New request submission (processAndSignDocument) always fails with 'cannot create document' error. Users cannot submit new requests using the main flow.",
+      "locations": [
+        "js/requests.js:2956 — processAndSignDocument()",
+        "js/firebaseService.js:14 — submitRequestWithHybrid()",
+        "js/firebaseService.js:104 — generateCommandHybrid()"
+      ],
+      "fix": "Replaced all calls with generateOfficialPDF() which is defined in admin.js and handles 'memo' and 'command' doctypes correctly. Set formData.doctype='memo' and formData.btnId appropriately before calling.",
+      "fixedIn": ["js/requests.js", "js/firebaseService.js"]
+    },
+    {
+      "id": "BUG-002",
+      "severity": "medium",
+      "status": "FIXED",
+      "title": "blobToBase64 defined in 3 files — admin.js version is unsafe",
+      "description": "blobToBase64() is defined in utils.js (safe, null-checks result), firebaseService.js (safe), and admin.js (unsafe — reader.result.split(',')[1] can throw TypeError if result is null). Since admin.js loads last, the unsafe version overrides the safe ones globally.",
+      "impact": "If FileReader fails for any reason, admin.js version throws unhandled TypeError instead of returning empty string.",
+      "locations": [
+        "js/utils.js:153 — primary definition (SAFE)",
+        "js/firebaseService.js:159 — duplicate (removed)",
+        "js/admin.js:2040 — unsafe duplicate (removed)"
+      ],
+      "fix": "Removed duplicates from firebaseService.js and admin.js. Only the safe version in utils.js remains.",
+      "fixedIn": ["js/admin.js", "js/firebaseService.js"]
+    },
+    {
+      "id": "BUG-003",
+      "severity": "low",
+      "status": "FIXED",
+      "title": "IS_DEBUG = true hardcoded in production code",
+      "description": "config.js:4 had IS_DEBUG=true which kept all console.log/warn/error/info active everywhere.",
+      "impact": "Performance overhead, potential information disclosure via console in production.",
+      "locations": ["js/config.js:4"],
+      "fix": "Changed to auto-detect: IS_DEBUG = true only when hostname is localhost/127.0.0.1/''. Automatically off on production domain.",
+      "fixedIn": ["js/config.js"]
+    },
+    {
+      "id": "BUG-004",
+      "severity": "medium",
+      "status": "OPEN",
+      "title": "Firebase API keys exposed in client-side code",
+      "description": "Firebase project credentials (apiKey, appId, messagingSenderId, etc.) are hardcoded in config.js and visible to any user who views source.",
+      "impact": "Risk of quota abuse or unauthorized Firebase access if Firestore security rules are permissive.",
+      "locations": ["js/config.js:14-21"],
+      "recommendation": "This is acceptable for Firebase client-side SDKs ONLY IF Firestore Security Rules are properly configured to restrict read/write access by authenticated users. Verify and harden security rules."
+    },
+    {
+      "id": "BUG-005",
+      "severity": "medium",
+      "status": "OPEN",
+      "title": "Google Apps Script URL exposed in client-side code",
+      "description": "The GAS endpoint URL is fully visible in config.js:52. Anyone can call it with arbitrary payloads.",
+      "impact": "Potential unauthorized data access or modification if GAS does not validate user identity/role.",
+      "locations": ["js/config.js:52"],
+      "recommendation": "Add server-side authentication in GAS: verify a signed token or session cookie before processing any action."
+    },
+    {
+      "id": "BUG-006",
+      "severity": "low",
+      "status": "OPEN",
+      "title": "Session storage used for sensitive user data",
+      "description": "getCurrentUser() (utils.js:135) reads user object from sessionStorage including role and username. XSS attacks could read this data.",
+      "impact": "User role and identity could be stolen via XSS, enabling privilege escalation if security is client-side only.",
+      "locations": ["js/utils.js:135-138", "js/auth.js:56"],
+      "recommendation": "Ensure all server-side operations (GAS, Firestore rules) independently verify user identity. Do not rely solely on client-side role from sessionStorage."
+    },
+    {
+      "id": "BUG-007",
+      "severity": "low",
+      "status": "FIXED",
+      "title": "Password padding for Firebase — no UI enforcement of minimum length",
+      "description": "auth.js pads passwords shorter than 6 characters with '0's for Firebase but the UI had no minimum length check, allowing users to create weak passwords without warning.",
+      "impact": "Users with short passwords could create accounts without understanding the padding behavior.",
+      "locations": ["js/auth.js — handleRegister()", "js/auth.js — handlePasswordUpdate()"],
+      "fix": "Added explicit minimum length check (>= 6 characters) in both handleRegister() and handlePasswordUpdate(). Shows clear Thai-language error via showAlert before the Firebase padding logic is reached.",
+      "fixedIn": ["js/auth.js"]
+    },
+    {
+      "id": "BUG-008",
+      "severity": "low",
+      "status": "OPEN",
+      "title": "No CSRF protection on GAS API calls",
+      "description": "apiCall() in utils.js sends POST requests with JSON body and Content-Type: text/plain. GAS does not validate request origin.",
+      "impact": "Cross-site request forgery possible if attacker can get authenticated users to load malicious pages.",
+      "locations": ["js/utils.js:18-83"],
+      "recommendation": "Add a CSRF token or Origin header validation in GAS doPost() handler."
+    },
+    {
+      "id": "BUG-009",
+      "severity": "low",
+      "status": "PARTIALLY FIXED",
+      "title": "Approval token links have no expiry warning",
+      "description": "tokenSign.js creates 7-day approval links, but there was no in-UI warning when the link is about to expire.",
+      "impact": "Approvers may miss deadlines; links expire silently.",
+      "locations": ["js/tokenSign.js:192-195"],
+      "fix": "Added in-page amber warning banner when token expires in less than 24 hours, showing exact hours remaining. Full email notification still requires GAS-side implementation.",
+      "fixedIn": ["js/tokenSign.js"],
+      "remainingWork": "Server-side email notification via GAS when link is created or near expiry."
+    },
+    {
+      "id": "BUG-010",
+      "severity": "low",
+      "status": "FIXED",
+      "title": "Cache not cleared after admin delete/status-update operations",
+      "description": "deleteRequestByAdmin() and deleteMemoByAdmin() did not clear user-side request cache after deletion. Status update functions did not clear window.userRequestsCache after changing request status.",
+      "impact": "Users could see deleted records or old status values for up to 5 minutes after an admin action.",
+      "locations": [
+        "js/admin.js:2005 — deleteRequestByAdmin()",
+        "js/admin.js:2030 — deleteMemoByAdmin()",
+        "js/admin.js:599-616 — updateRequestStatus()",
+        "js/admin.js:698-703 — inline status update"
+      ],
+      "fix": "Added clearRequestsCache() in delete functions. Added targeted window.userRequestsCache=null in status update functions (without clearing allRequestsCache which admin needs immediately).",
+      "fixedIn": ["js/admin.js"]
+    },
+    {
+      "id": "BUG-011",
+      "severity": "low",
+      "status": "FIXED",
+      "title": "validateRequestForm used bare alert() and showed double-error on form submit",
+      "description": "validateRequestForm() used alert() (not the styled showAlert modal) and showed generic field labels. When called from handleRequestFormSubmit(), a second generic error alert was also shown from the catch block.",
+      "impact": "Inconsistent UI — raw browser alert() instead of styled modal; users saw two error messages on validation failure.",
+      "locations": ["js/requests.js:2526-2547", "js/requests.js:1813"],
+      "fix": "Rewrote validateRequestForm to use showAlert with specific Thai field-level messages per missing field. Changed handleRequestFormSubmit to return early (not throw) after validation failure, preventing double-alert.",
+      "fixedIn": ["js/requests.js"]
+    }
+  ],
+
+  "codeQualityNotes": [
+    {
+      "category": "Architecture",
+      "note": "Hybrid Firebase+GAS design is intentional and works. GAS is authoritative for IDs and file storage; Firebase is for real-time UI updates."
+    },
+    {
+      "category": "Error Handling",
+      "note": "Most async operations have try/catch with user-friendly alerts and console logging. Cloud Run failures fall back to GAS gracefully."
+    },
+    {
+      "category": "Code Organization",
+      "note": "admin.js (2526 lines) and requests.js (3176 lines) are very large. Consider splitting into smaller modules if the project grows."
+    },
+    {
+      "category": "No Build System",
+      "note": "No bundler (webpack/vite). All JS is loaded as separate CDN/local scripts. No TypeScript, no unit tests."
+    },
+    {
+      "category": "Thai Font Handling",
+      "note": "THSarabunNew fonts are loaded locally. PDF generation will fail if fonts are missing or CORS-blocked."
+    },
+    {
+      "category": "Version Pinning",
+      "note": "CDN libraries use fixed versions (e.g., Chart.js 3.7.1) — good. Tailwind CSS uses latest CDN — could break on major version."
+    }
+  ],
+
+  "performanceNotes": [
+    { "item": "Cache system",       "status": "good",    "detail": "5-minute cache prevents excess GAS calls" },
+    { "item": "Parallel data fetch","status": "good",    "detail": "Promise.all() used in several admin views" },
+    { "item": "Lazy PDF loading",   "status": "good",    "detail": "Triple fallback: Firestore cache → GAS proxy → direct fetch" },
+    { "item": "No bundling",        "status": "concern", "detail": "11 JS files loaded separately; no minification" },
+    { "item": "Large templates",    "status": "concern", "detail": "template_memo.docx is 3.4 MB — slow on mobile" },
+    { "item": "PDF merging",        "status": "concern", "detail": "pdf-lib merge in browser can be slow for large files" }
+  ],
+
+  "fixLog": [
+    {
+      "date": "2026-04-09",
+      "by": "Claude Code Audit",
+      "changes": [
+        {
+          "file": "js/requests.js",
+          "line": 2956,
+          "description": "Replaced undefined generatePdfFromCloudRun() call with generateOfficialPDF({...formData, doctype:'memo', btnId:'submit-button'})"
+        },
+        {
+          "file": "js/firebaseService.js",
+          "line": 14,
+          "description": "Replaced generatePdfFromCloudRun('template_memo.docx', formData) with generateOfficialPDF({...formData, doctype:'memo', btnId:null})"
+        },
+        {
+          "file": "js/firebaseService.js",
+          "line": 104,
+          "description": "Replaced generatePdfFromCloudRun(templateName, data) with generateOfficialPDF({...data, doctype:'command', templateType:..., btnId:null})"
+        },
+        {
+          "file": "js/admin.js",
+          "line": 2040,
+          "description": "Removed unsafe duplicate blobToBase64() definition (was missing null check on reader.result)"
+        },
+        {
+          "file": "js/firebaseService.js",
+          "line": 161,
+          "description": "Removed redundant duplicate blobToBase64() definition"
+        }
+      ]
+    }
+  ],
+
+  "openRecommendations": [
+    "Verify and harden Firestore Security Rules to enforce role-based access (BUG-004)",
+    "Add authentication/authorization check in Google Apps Script doPost() handler (BUG-005)",
+    "Ensure all server-side (GAS) actions verify user role independently of client (BUG-006)",
+    "Pin Tailwind CSS CDN to a specific version to prevent unexpected breakage",
+    "Add server-side email notification via GAS when approval token links are created/near expiry (BUG-009 remaining)",
+    "Consider Firestore onSnapshot() real-time listeners for admin views to replace polling cache"
+  ],
+
+  "fixLog": [
+    {
+      "date": "2026-04-09",
+      "round": 1,
+      "by": "Claude Code Audit — Initial Bug Fixes",
+      "changes": [
+        {
+          "file": "js/requests.js",
+          "description": "BUG-001: Replaced undefined generatePdfFromCloudRun() with generateOfficialPDF({doctype:'memo', btnId:'submit-button'})"
+        },
+        {
+          "file": "js/firebaseService.js",
+          "description": "BUG-001: Replaced both generatePdfFromCloudRun() calls with generateOfficialPDF()"
+        },
+        {
+          "file": "js/admin.js",
+          "description": "BUG-002: Removed unsafe duplicate blobToBase64() (missing null-check on reader.result)"
+        },
+        {
+          "file": "js/firebaseService.js",
+          "description": "BUG-002: Removed redundant duplicate blobToBase64()"
+        }
+      ]
+    },
+    {
+      "date": "2026-04-09",
+      "round": 2,
+      "by": "Claude Code Audit — Full Bug Fix Pass",
+      "changes": [
+        {
+          "file": "js/config.js",
+          "description": "BUG-003: IS_DEBUG now auto-detects localhost vs production hostname instead of hardcoded true"
+        },
+        {
+          "file": "js/auth.js",
+          "description": "BUG-007: Added minimum 6-character password validation in handleRegister() and handlePasswordUpdate() before Firebase padding logic"
+        },
+        {
+          "file": "js/tokenSign.js",
+          "description": "BUG-009: Added amber warning banner in handleTokenSignFlow() when token expires in less than 24 hours"
+        },
+        {
+          "file": "js/admin.js",
+          "description": "BUG-010: Added clearRequestsCache() in deleteRequestByAdmin() and deleteMemoByAdmin(). Added targeted window.userRequestsCache=null in status update functions."
+        },
+        {
+          "file": "js/requests.js",
+          "description": "BUG-011: Rewrote validateRequestForm() to use showAlert with specific Thai field-level messages. Fixed double-alert by returning early in handleRequestFormSubmit instead of throwing."
+        }
+      ]
+    }
+  ]
+}

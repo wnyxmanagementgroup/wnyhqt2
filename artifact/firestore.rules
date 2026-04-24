@@ -1,0 +1,185 @@
+rules_version = '2';
+
+// ===================================================================
+// Firestore Security Rules — ระบบไปราชการ WNY HQ
+// วันที่: 2026-04-22
+//
+// โครงสร้าง Collections:
+//   requests        — คำขอไปราชการ (owner = username field)
+//   users           — ข้อมูลผู้ใช้  (doc ID = Firebase Auth UID)
+//   approvalLinks   — Token ลงนาม  (public read, token-based update)
+//   counters        — นับเลขเอกสาร  (authenticated read/write)
+//   systemConfig    — ค่าตั้งระบบ   (admin write)
+//   settings        — ประกาศ/ข่าว   (admin write)
+// ===================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ------------------------------------------------------------------
+    // Helper Functions
+    // ------------------------------------------------------------------
+
+    // ตรวจว่า login อยู่หรือเปล่า (Firebase Auth)
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // ตรวจว่ามี user doc อยู่จริงหรือไม่
+    function userDocExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // ดึงข้อมูล user doc ของผู้ที่กำลัง login (อ่านจาก Firestore)
+    function myUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // ดึง role ของผู้ที่กำลัง login — คืน 'none' ถ้าไม่มี doc
+    function myRole() {
+      return userDocExists() ? myUserDoc().role : 'none';
+    }
+
+    // ดึง username ของผู้ที่กำลัง login — คืน '' ถ้าไม่มี doc
+    function myUsername() {
+      return userDocExists() ? myUserDoc().username : '';
+    }
+
+    // ตรวจว่าเป็น admin หรือเปล่า
+    function isAdmin() {
+      return isAuthenticated() && userDocExists() && myRole() == 'admin';
+    }
+
+    // ตรวจว่าเป็นผู้อนุมัติ (ทุก role ยกเว้น user และ admin)
+    function isApprover() {
+      return isAuthenticated() && userDocExists() && myRole() in [
+        'director', 'saraban',
+        'head_science', 'head_math', 'head_thai', 'head_foreign',
+        'head_social', 'head_health', 'head_art', 'head_career',
+        'head_guidance', 'head_general', 'head_personnel',
+        'head_budget', 'head_acad',
+        'deputy_general', 'deputy_budget', 'deputy_acad', 'deputy_personnel'
+      ];
+    }
+
+    // ตรวจว่าเป็นเจ้าของ request (เทียบจาก username field)
+    function isOwnerOf(res) {
+      return isAuthenticated() && userDocExists() && res.data.username == myUsername();
+    }
+
+    // ------------------------------------------------------------------
+    // requests — คำขอไปราชการ
+    // ------------------------------------------------------------------
+    match /requests/{requestId} {
+      // อ่าน: admin / approver เห็นทุก request, user ทั่วไปเห็นเฉพาะของตัวเอง
+      allow read: if isAuthenticated()
+                  && (isAdmin() || isApprover() || isOwnerOf(resource));
+
+      // สร้าง: ต้อง login เท่านั้น และต้องใส่ username ให้ตรงกับตัวเอง
+      allow create: if isAuthenticated()
+                    && request.resource.data.username == myUsername();
+
+      // แก้ไข: admin แก้ได้ทุก request | เจ้าของแก้ได้เฉพาะของตัวเอง
+      allow update: if isAuthenticated()
+                    && (isAdmin() || isOwnerOf(resource));
+
+      // ลบ: admin เท่านั้น
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // users — ข้อมูลผู้ใช้
+    // ------------------------------------------------------------------
+    match /users/{userId} {
+      // อ่าน: admin เห็นทุกคน | ตัวเองอ่านได้เฉพาะของตัวเอง
+      allow read: if isAuthenticated()
+                  && (isAdmin() || request.auth.uid == userId);
+
+      // สร้างบัญชีใหม่: admin สร้างได้ทุกคน | ตัวเองสร้าง doc ตัวเองได้ (auto-provision ตอน login)
+      // role ที่แท้จริงมาจาก GAS/Sheets ซึ่งเป็น authoritative source อยู่แล้ว
+      allow create: if isAdmin() || request.auth.uid == userId;
+
+      // แก้ไข: admin แก้ได้ทุกคน | ตัวเองแก้ได้เฉพาะ field ที่อนุญาต
+      //   (ป้องกันไม่ให้ user แก้ role ตัวเองเป็น admin)
+      allow update: if isAuthenticated() && (
+        isAdmin()
+        || (
+          request.auth.uid == userId
+          && !('role' in request.resource.data.diff(resource.data).affectedKeys())
+        )
+      );
+
+      // ลบ: admin เท่านั้น
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // approvalLinks — Token ลงนามแบบไม่ต้อง Login
+    //
+    // ✅ อ่านได้ทุกคน (tokenSign.js ต้องใช้โดยไม่ login)
+    // ✅ สร้าง: admin หรือ approver
+    // ✅ อัปเดต: อนุญาตเฉพาะการเปลี่ยน used=true (ปิด token หลังใช้)
+    //           ห้ามแก้ไข field อื่น
+    // ✅ ลบ: admin เท่านั้น
+    // ------------------------------------------------------------------
+    match /approvalLinks/{linkId} {
+      allow read: if true;
+
+      allow create: if isAuthenticated() && (isAdmin() || isApprover());
+
+      // อนุญาตให้ mark used=true เท่านั้น ห้ามแก้ field อื่น
+      allow update: if
+        request.resource.data.used == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used'])
+        && resource.data.used == false;
+
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // counters — นับเลขเอกสาร (atomic counter)
+    // ------------------------------------------------------------------
+    match /counters/{counterId} {
+      // ต้อง login จึงจะสร้าง/อ่าน/แก้ counter ได้
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // ------------------------------------------------------------------
+    // systemConfig — ค่าตั้งระบบ (ชื่อผู้ลงนาม ฯลฯ)
+    // ------------------------------------------------------------------
+    match /systemConfig/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // settings — ประกาศ / ข่าวสาร
+    // ------------------------------------------------------------------
+    match /settings/{docId} {
+      // ประกาศอ่านได้แม้ยังไม่ login (แสดงบนหน้า login)
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // memos — บันทึกข้อความ
+    // ------------------------------------------------------------------
+    match /memos/{memoId} {
+      allow read: if isAuthenticated()
+                  && (isAdmin() || isApprover() || isOwnerOf(resource));
+      allow create: if isAuthenticated()
+                    && request.resource.data.username == myUsername();
+      allow update: if isAuthenticated()
+                    && (isAdmin() || isOwnerOf(resource));
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // ปิดกั้นทุก Collection ที่ไม่ได้ระบุ (default deny)
+    // ------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
