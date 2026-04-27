@@ -434,6 +434,7 @@ async function _confirmSarabanUpload() {
                 pdfUrl:           newPdfUrl,
                 currentPdfUrl:    newPdfUrl,
                 memoPdfUrl:       newPdfUrl,
+                completedMemoUrl: newPdfUrl,
                 docStatus:        'waiting_director',
                 sarabanDocNum:    docNum,
                 sarabanDocDate:   docDate,
@@ -441,9 +442,13 @@ async function _confirmSarabanUpload() {
                 sarabanStampedBy: user?.name || user?.username || 'saraban',
                 lastUpdated:      firebase.firestore.FieldValue.serverTimestamp(),
             };
-            if (typeof sarabanBase64 === 'string' && sarabanBase64.length > 0 && sarabanBase64.length <= 900_000) {
-                sarabanUpdate.pdfBase64 = sarabanBase64;
-            }
+            // คำนวณ base64 จาก previewBlob เพื่อ cache ให้ผู้อำนวยการโหลดได้เร็ว
+            try {
+                const sarabanBase64 = await blobToBase64(sarabanState.previewBlob);
+                if (typeof sarabanBase64 === 'string' && sarabanBase64.length > 0 && sarabanBase64.length <= 900_000) {
+                    sarabanUpdate.pdfBase64 = sarabanBase64;
+                }
+            } catch (_) { /* ไม่ cache ถ้า encode ไม่ได้ */ }
             await db.collection('requests').doc(safeId).set(sarabanUpdate, { merge: true });
         }
 
@@ -573,6 +578,7 @@ async function _applySarabanCommandStamps() {
                 pdfUrl:           newPdfUrl,
                 currentPdfUrl:    newPdfUrl,
                 memoPdfUrl:       newPdfUrl,
+                completedMemoUrl: newPdfUrl,
                 docStatus:        'waiting_director',
                 sarabanDocNum:    docNum,
                 sarabanDocDate:   docDate,
@@ -580,7 +586,6 @@ async function _applySarabanCommandStamps() {
                 sarabanStampedBy: user?.name || user?.username || 'saraban',
                 lastUpdated:      firebase.firestore.FieldValue.serverTimestamp(),
             };
-            // 💾 เก็บ PDF ที่ประทับเลขแล้วใน Firestore เพื่อให้ผู้อำนวยการโหลดได้เร็ว
             if (typeof sarabanBase64 === 'string' && sarabanBase64.length > 0 && sarabanBase64.length <= 900_000) {
                 sarabanUpdate.pdfBase64 = sarabanBase64;
             }

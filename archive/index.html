@@ -7,56 +7,63 @@
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Sarabun',Arial,sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh}
+  body{font-family:'Sarabun',Arial,sans-serif;background:linear-gradient(135deg,#fdf2f8 0%,#f3e8ff 46%,#e0e7ff 100%);color:#1e293b;min-height:100vh}
 
-  .header{background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;padding:20px 24px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+  .header{background:linear-gradient(135deg,#818cf8 0%,#6366f1 45%,#7c3aed 100%);color:#fff;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:14px;box-shadow:0 12px 28px rgba(99,102,241,.18)}
+  .header-main{display:flex;align-items:center;gap:14px;min-width:0}
   .header-logo{width:44px;height:44px;background:rgba(255,255,255,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
   .header-title{font-size:20px;font-weight:700}
   .header-sub{font-size:13px;opacity:.8;margin-top:2px}
+  .header-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
+  .header-link{height:38px;padding:0 14px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-size:13px;font-weight:600;transition:background .2s,color .2s,border-color .2s}
+  .header-link.secondary{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.18)}
+  .header-link.secondary:hover{background:rgba(255,255,255,.2)}
+  .header-link.primary{background:#fff;color:#5b21b6;border:1px solid rgba(255,255,255,.55)}
+  .header-link.primary:hover{background:#f5f3ff}
 
-  .controls{background:#fff;padding:14px 24px;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:sticky;top:0;z-index:10;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  .controls{background:rgba(255,255,255,.72);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:14px 24px;border-bottom:1px solid #ddd6fe;display:flex;flex-wrap:wrap;gap:10px;align-items:center;position:sticky;top:0;z-index:10;box-shadow:0 8px 22px rgba(99,102,241,.08)}
   .controls select,.controls input{height:38px;border:1px solid #d1d5db;border-radius:8px;padding:0 12px;font-size:14px;font-family:inherit;background:#fff;color:#374151;outline:none;transition:border-color .2s}
-  .controls select:focus,.controls input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+  .controls select:focus,.controls input:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(129,140,248,.18)}
   #search-input{min-width:220px;flex:1}
-  .btn-load{height:38px;padding:0 18px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .2s;display:flex;align-items:center;gap:6px}
-  .btn-load:hover{background:#1d4ed8}
-  .btn-load:disabled{background:#93c5fd;cursor:not-allowed}
-  .badge{background:#eff6ff;color:#1d4ed8;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600;white-space:nowrap}
+  .btn-load{height:38px;padding:0 18px;background:linear-gradient(135deg,#818cf8 0%,#6366f1 45%,#7c3aed 100%);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .2s,transform .2s;display:flex;align-items:center;gap:6px;box-shadow:0 10px 20px rgba(99,102,241,.18)}
+  .btn-load:hover{opacity:.92;transform:translateY(-1px)}
+  .btn-load:disabled{background:#c4b5fd;cursor:not-allowed;box-shadow:none}
+  .badge{background:#ede9fe;color:#5b21b6;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600;white-space:nowrap}
 
-  .stats-bar{display:flex;gap:12px;padding:14px 24px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-wrap:wrap}
-  .stat-card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 16px;display:flex;align-items:center;gap:10px;min-width:130px}
-  .stat-num{font-size:22px;font-weight:700;color:#1e3a5f;line-height:1}
+  .stats-bar{display:flex;gap:12px;padding:14px 24px;background:transparent;border-bottom:1px solid rgba(221,214,254,.65);flex-wrap:wrap}
+  .stat-card{background:rgba(255,255,255,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid #e9d5ff;border-radius:14px;padding:10px 16px;display:flex;align-items:center;gap:10px;min-width:130px;box-shadow:0 8px 20px rgba(99,102,241,.06)}
+  .stat-num{font-size:22px;font-weight:700;color:#5b21b6;line-height:1}
   .stat-label{font-size:12px;color:#64748b;margin-top:3px}
 
   .table-wrap{padding:20px 24px}
-  table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);border:1px solid #e2e8f0}
-  thead tr{background:#1e3a5f}
+  table{width:100%;border-collapse:collapse;font-size:13px;background:rgba(255,255,255,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:16px;overflow:hidden;box-shadow:0 14px 28px rgba(99,102,241,.08);border:1px solid #e9d5ff}
+  thead tr{background:linear-gradient(135deg,#818cf8 0%,#6366f1 45%,#7c3aed 100%)}
   th{padding:10px 12px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#fff;white-space:nowrap}
   td{padding:9px 12px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
   tbody tr:last-child td{border-bottom:none}
-  tbody tr:hover{background:#f0f7ff;cursor:pointer}
+  tbody tr:hover{background:#faf5ff;cursor:pointer}
   tbody tr.row-complete{background:rgba(220,252,231,.3)}
   tbody tr.row-complete:hover{background:rgba(220,252,231,.6)}
 
   /* status badge */
   .sbadge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;white-space:nowrap}
   .s-done{background:#dcfce7;color:#166534}
-  .s-progress{background:#fef9c3;color:#854d0e}
-  .s-pending{background:#f1f5f9;color:#475569}
+  .s-progress{background:#fce7f3;color:#9d174d}
+  .s-pending{background:#f5f3ff;color:#5b21b6}
   .s-rejected{background:#fee2e2;color:#991b1b}
 
   /* file chips in table */
   .chip{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:12px;white-space:nowrap}
-  .chip-blue{background:#eff6ff;color:#1d4ed8}
+  .chip-blue{background:#ede9fe;color:#5b21b6}
   .chip-green{background:#f0fdf4;color:#166534}
-  .chip-purple{background:#fdf4ff;color:#7c3aed}
-  .chip-amber{background:#fffbeb;color:#92400e}
+  .chip-purple{background:#f5f3ff;color:#7c3aed}
+  .chip-amber{background:#fdf2f8;color:#9d174d}
 
   /* empty/loading */
   .state-msg{text-align:center;padding:60px 20px;color:#94a3b8}
   .state-msg .icon{font-size:48px;margin-bottom:12px}
   .state-msg p{font-size:15px}
-  .loader-ring{width:36px;height:36px;border:4px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
+  .loader-ring{width:36px;height:36px;border:4px solid #e9d5ff;border-top-color:#6366f1;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
   @keyframes spin{to{transform:rotate(360deg)}}
 
   /* ===== DETAIL MODAL ===== */
@@ -64,7 +71,7 @@
   #detail-modal.open{display:flex}
   .modal-box{background:#fff;border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.25);width:100%;max-width:620px;max-height:90vh;overflow-y:auto;animation:fadeUp .2s ease}
   @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
-  .modal-header{background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;padding:18px 22px;border-radius:16px 16px 0 0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .modal-header{background:linear-gradient(135deg,#818cf8 0%,#6366f1 45%,#7c3aed 100%);color:#fff;padding:18px 22px;border-radius:16px 16px 0 0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
   .modal-header-id{font-size:20px;font-weight:700;line-height:1.2}
   .modal-header-name{font-size:13px;opacity:.85;margin-top:4px}
   .modal-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:background .2s}
@@ -76,7 +83,7 @@
   .info-item label{font-size:11px;color:#94a3b8;display:block;margin-bottom:2px}
   .info-item span{font-size:13px;font-weight:500;color:#1e293b}
   .doc-card{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:8px;text-decoration:none;color:inherit;transition:all .15s}
-  .doc-card:hover{border-color:#3b82f6;background:#f0f7ff;transform:translateX(3px)}
+  .doc-card:hover{border-color:#8b5cf6;background:#faf5ff;transform:translateX(3px)}
   .doc-card.green{border-color:#bbf7d0}.doc-card.green:hover{border-color:#16a34a;background:#f0fdf4}
   .doc-card.purple{border-color:#e9d5ff}.doc-card.purple:hover{border-color:#7c3aed;background:#fdf4ff}
   .doc-card.amber{border-color:#fde68a}.doc-card.amber:hover{border-color:#d97706;background:#fffbeb}
@@ -88,9 +95,12 @@
   .no-doc{text-align:center;padding:20px;color:#cbd5e1;font-size:13px;border:2px dashed #e2e8f0;border-radius:10px}
   .modal-footer{padding:0 22px 18px;display:flex;justify-content:flex-end}
   .btn-close-footer{height:36px;padding:0 20px;background:#f1f5f9;color:#374151;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .2s}
-  .btn-close-footer:hover{background:#e2e8f0}
+  .btn-close-footer:hover{background:#ede9fe}
 
   @media(max-width:640px){
+    .header{align-items:flex-start}
+    .header-main{width:100%}
+    .header-actions{width:100%;justify-content:flex-start}
     .header-title{font-size:16px}
     .table-wrap{padding:12px}
     .controls{padding:12px}
@@ -104,10 +114,16 @@
 <body>
 
 <div class="header">
-  <div class="header-logo">📚</div>
-  <div>
-    <div class="header-title">คลังข้อมูลไปราชการ</div>
-    <div class="header-sub">ค้นหาและดาวน์โหลดเอกสารย้อนหลัง</div>
+  <div class="header-main">
+    <div class="header-logo">📚</div>
+    <div>
+      <div class="header-title">คลังข้อมูลไปราชการ</div>
+      <div class="header-sub">ส่วนหนึ่งของเว็บไซต์ระบบไปราชการออนไลน์ - เข้าใช้งานได้โดยไม่ต้อง Login</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <a href="../" class="header-link secondary">หน้าหลักเว็บไซต์</a>
+    <a href="../app/" class="header-link primary">เข้าสู่ระบบไปราชการ</a>
   </div>
 </div>
 
@@ -211,8 +227,11 @@
   </div>
 </div>
 
+<script src="../js/config.js?v=3"></script>
 <script>
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxHffk5rLHflg669FsZysd8GUPe490NzSvCeRToOra_F3G4TtAfxU2ldVZxcPqsSEZo/exec';
+const GAS_URL = (typeof SCRIPT_URL !== 'undefined' && SCRIPT_URL)
+  ? SCRIPT_URL
+  : 'https://script.google.com/macros/s/AKfycbxRK-XX8Kk4TdMPRSa1Wy9fu9obubLQ1uPmBmd-S4QTQiAe2zKgU6v3_i1UtTpIjpJW/exec';
 let allData = [];
 
 // ====== INIT ======
@@ -318,7 +337,7 @@ function renderTable() {
     tr.onclick = () => openModal(r);
     tr.title   = 'คลิกเพื่อดูรายละเอียด';
     tr.innerHTML =
-      '<td style="white-space:nowrap;font-weight:700;color:#1e3a5f">' + esc(r.id) + '</td>'
+      '<td style="white-space:nowrap;font-weight:700;color:#5b21b6">' + esc(r.id) + '</td>'
     + '<td>' + esc(r.requesterName) + '</td>'
     + '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(r.purpose) + '</td>'
     + '<td style="white-space:nowrap">' + esc(r.location) + '</td>'

@@ -39,7 +39,7 @@
                     <div class="text-center mb-6">
                         <img src="https://img2.pic.in.th/pic/WNY-App-.png" alt="Logo" class="mx-auto h-28 mb-4 drop-shadow-md">
                     </div>
-                    <form id="login-form">
+	                    <form id="login-form">
                         <div class="mb-4">
                             <label for="username" class="form-label text-gray-700">ชื่อผู้ใช้ (Username)</label>
                             <input type="text" id="username" class="form-input" placeholder="ระบุชื่อผู้ใช้" required>
@@ -52,11 +52,19 @@
                             <div id="login-loader" class="loader hidden"></div>
                             <span id="login-button-text">เข้าสู่ระบบ</span>
                         </button>
-                        <p id="login-error" class="text-red-500 text-center mt-4 hidden bg-red-50 p-2 rounded"></p>
-                    </form>
-                    <p class="text-center mt-4">
-                        <button type="button" id="show-forgot-password-modal" class="font-semibold text-indigo-600 hover:text-indigo-500 text-sm">Usernameใช้แบบเดียวกับระบบ School-mis</button>
-                    </p>
+	                        <p id="login-error" class="text-red-500 text-center mt-4 hidden bg-red-50 p-2 rounded"></p>
+	                    </form>
+	                    <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+	                        <a href="../archive/" class="btn btn-secondary text-center">
+	                            เปิดคลังข้อมูลย้อนหลัง
+	                        </a>
+	                        <a href="../" class="btn btn-secondary text-center">
+	                            กลับหน้าหลักเว็บไซต์
+	                        </a>
+	                    </div>
+	                    <p class="text-center mt-4">
+	                        <button type="button" id="show-forgot-password-modal" class="font-semibold text-indigo-600 hover:text-indigo-500 text-sm">Usernameใช้แบบเดียวกับระบบ School-mis</button>
+	                    </p>
                 </div>
             </div>
             <div id="reminder-modal" class="modal" style="display: none; z-index: 100;">
@@ -266,10 +274,6 @@
                         <button id="admin-email-backup-btn" onclick="adminSendYearlyBackupEmail()" class="btn-sync hidden" style="background:#0891b2;" title="ส่ง Email สำรองข้อมูลพร้อม link ดาวน์โหลดทุกไฟล์">📧 ส่ง Email สำรอง</button>
                         <a id="archive-link-btn" href="../archive/" target="_blank" class="btn-sync hidden" style="background:#0f766e;text-decoration:none;display:none;">📚 คลังข้อมูล</a>
                     </div>
-                    <button id="trash-bin-btn" onclick="showTrashBin()" class="btn-sync hidden"
-                        style="background:#dc2626;" title="ถังขยะ — กู้คืนได้ภายใน 24 ชม.">
-                        🗑️ ถังขยะ
-                    </button>
                     <span id="user-fullname" class="topbar-username">...</span>
                     <button id="logout-button" class="btn-logout">ออกจากระบบ</button>
                 </div>
@@ -290,7 +294,7 @@
     </div>
 
     <div id="no-requests-message" class="hidden text-center py-8 text-gray-500 bg-gray-50 rounded-lg border border-gray-200 mt-4">
-        <p>ไม่พบรายการคำขอในปีงบประมาณนี้</p>
+        <p>ยังไม่มีข้อมูลคำขอไปราชการในปีงบประมาณนี้</p>
     </div>
 
     <div id="requests-table-wrapper" class="table-wrapper hidden">
@@ -593,6 +597,11 @@
                                 <input type="text" id="edit-location" class="form-input" required>
                             </div>
                             <div class="mt-4">
+                                <label for="edit-province" class="form-label">จังหวัด</label>
+                                <select id="edit-province" class="form-input"></select>
+                                <input type="text" id="edit-province-other" class="form-input mt-2 hidden" placeholder="ระบุชื่อจังหวัด">
+                            </div>
+                            <div class="mt-4">
                                 <label for="edit-purpose" class="form-label">เพื่อ</label>
                                 <textarea id="edit-purpose" rows="2" class="form-input" required></textarea>
                             </div>
@@ -834,9 +843,15 @@
                     <input type="text" id="admin-command-requester-position" class="form-input">
                 </div>
             </div>
-            <div class="mb-4">
-                <label class="form-label">สถานที่ไปราชการ</label>
-                <input type="text" id="admin-command-location" class="form-input">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="form-label">สถานที่ไปราชการ</label>
+                    <input type="text" id="admin-command-location" class="form-input">
+                </div>
+                <div>
+                    <label class="form-label">จังหวัด</label>
+                    <input type="text" id="admin-command-province" class="form-input" placeholder="เช่น สระแก้ว">
+                </div>
             </div>
             <div class="mb-4">
                 <label class="form-label">วัตถุประสงค์</label>
@@ -1840,6 +1855,12 @@
                                     <input type="text" id="dispatch-location" class="w-full form-input">
                                 </div>
                                 <div>
+                                    <label class="text-sm text-gray-600">จังหวัด</label>
+                                    <input type="text" id="dispatch-province" class="w-full form-input" placeholder="เช่น สระแก้ว">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
                                     <label class="text-sm text-gray-600 font-bold text-red-600">พักค้างคืนที่ (จำเป็นถ้าต่างจังหวัด)</label>
                                     <input type="text" id="dispatch-stay-at" class="w-full form-input border-red-200 focus:border-red-500" placeholder="-">
                                 </div>
@@ -1947,14 +1968,22 @@
                             <option value="เสร็จสิ้นรอออกคำสั่งไปราชการ">เสร็จสิ้นรอออกคำสั่งไปราชการ</option>
                             <option value="นำกลับไปแก้ไข">นำกลับไปแก้ไข</option>
                             <option value="เสร็จสิ้น/รับไฟล์ไปใช้งาน">เสร็จสิ้น/รับไฟล์ไปใช้งาน</option>
+                            <option value="ยกเลิก" class="text-red-600">❌ ยกเลิกและลบออกจากระบบ</option>
                         </select>
                     </div>
-                    
+
                     <!-- ช่องเหตุผลตีกลับ: แสดงเฉพาะเมื่อเลือก "นำกลับไปแก้ไข" -->
                     <div id="admin-rejection-reason-container" class="mb-4 hidden">
                         <label class="form-label text-red-600 font-bold">เหตุผลที่ตีกลับ</label>
                         <textarea id="admin-rejection-reason" class="form-input" rows="2"
                             placeholder="ระบุเหตุผลที่ส่งกลับไปแก้ไข..."></textarea>
+                    </div>
+
+                    <!-- ช่องเหตุผลยกเลิก: แสดงเฉพาะเมื่อเลือก "ยกเลิก" -->
+                    <div id="admin-cancel-reason-container" class="mb-4 hidden">
+                        <label class="form-label text-red-700 font-bold">⚠️ เหตุผลที่ยกเลิก (จะลบบันทึกออกจากระบบทั้งหมด)</label>
+                        <textarea id="admin-cancel-reason" class="form-input border-red-400" rows="2"
+                            placeholder="ระบุเหตุผลที่ยกเลิก..."></textarea>
                     </div>
 
                     <div id="admin-file-uploads" class="space-y-4 hidden">
@@ -2141,8 +2170,8 @@
 
         <!-- ซ้าย: PDF Viewer -->
         <div id="signature-pdf-container"
-            class="flex-1 overflow-auto bg-gray-300 p-4 relative flex justify-center items-start">
-            <canvas id="signature-pdf-canvas" class="shadow-md bg-white self-start"></canvas>
+            class="flex-1 overflow-auto bg-gray-300 p-4 relative flex flex-col items-center gap-2">
+            <canvas id="signature-pdf-canvas" class="shadow-md bg-white"></canvas>
             <!-- .sig-placement elements injected by JS -->
         </div>
 
@@ -2205,11 +2234,11 @@
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
    <script src="../js/config.js?v=3"></script>          <script src="../js/utils.js?v=3"></script>
 <script src="../js/firebaseService.js?v=3"></script>  <script src="../js/auth.js?v=3"></script>
-<script src="../js/requests.js?v=3"></script>
+<script src="../js/requests.js?v=4"></script>
 <script src="../js/admin.js?v=3"></script>
 <script src="../js/stats.js?v=3"></script>
 <script src="../js/tokenSign.js?v=3"></script>
-<script src="../js/main.js?v=3"></script>
+<script src="../js/main.js?v=4"></script>
 <script src="../js/sarabun.js?v=3"></script>
 <script src="../js/signature.js?v=3"></script>
 
@@ -2320,26 +2349,6 @@
 </div>
 <!-- ===== /TRAVEL SCHEDULE MODAL ===== -->
 
-<!-- ===== TRASH BIN MODAL ===== -->
-<div id="trash-modal" class="fixed inset-0 bg-black bg-opacity-50 z-[80] hidden flex items-center justify-center p-4">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
-    <div class="flex items-center justify-between px-6 py-4" style="background:#dc2626;">
-      <div>
-        <h3 class="text-white font-bold text-lg">🗑️ ถังขยะ</h3>
-        <p class="text-red-200 text-xs">กู้คืนข้อมูลได้ภายใน 24 ชั่วโมง นับจากเวลาที่ลบ</p>
-      </div>
-      <button onclick="closeTrashBin()" class="text-white hover:text-red-200 text-2xl leading-none">&times;</button>
-    </div>
-    <div id="trash-list" class="px-6 py-4 max-h-96 overflow-y-auto divide-y divide-gray-100">
-      <p class="text-center text-gray-400 py-8">กำลังโหลด...</p>
-    </div>
-    <div class="px-6 py-3 bg-gray-50 text-right">
-      <button onclick="closeTrashBin()" class="text-sm text-gray-500 hover:text-gray-700">ปิด</button>
-    </div>
-  </div>
-</div>
-<!-- ===== /TRASH BIN MODAL ===== -->
 
 </body>
 </html>
-

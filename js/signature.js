@@ -12,6 +12,7 @@ let sigState = {
     currentDocStatus: null,
     placements:      [],       // [{ el: HTMLElement, sigDataURL: string }]
     lastSigDataURL:  null,     // data URL ลายเซ็นล่าสุดที่วาด
+    pageCanvases:    [],       // [HTMLCanvasElement] ทุกหน้า
 };
 
 // ============================================================
@@ -70,9 +71,11 @@ async function openSignatureSystem(pdfUrl, documentId, title = '✍️ ลงน
         // ซ่อนปุ่มคัดลอก
         document.getElementById('btn-dup-sig').classList.add('hidden');
 
-        // ล้าง overlays เก่า
+        // ล้าง overlays และ canvases หน้าก่อนหน้า
         const container = document.getElementById('signature-pdf-container');
         container.querySelectorAll('.sig-placement').forEach(el => el.remove());
+        container.querySelectorAll('.pdf-page-canvas').forEach(el => el.remove());
+        sigState.pageCanvases = [];
 
         // แสดง Modal
         document.getElementById('signature-modal').classList.remove('hidden');
@@ -157,16 +160,30 @@ async function openSignatureSystem(pdfUrl, documentId, title = '✍️ ลงน
         if (!pdfBytes) throw new Error('ไม่สามารถโหลดไฟล์ PDF ได้ (ลองทุกวิธีแล้วไม่พบข้อมูล PDF ที่ถูกต้อง)');
         sigState.pdfBytes = pdfBytes;
 
-        // Render PDF หน้า 1 ลงบน canvas
-        const canvas = document.getElementById('signature-pdf-canvas');
-        const ctx    = canvas.getContext('2d');
-        const task   = pdfjsLib.getDocument({ data: new Uint8Array(sigState.pdfBytes) });
-        const pdfDoc = await task.promise;
-        const page   = await pdfDoc.getPage(1);
-        const vp     = page.getViewport({ scale: sigState.scale });
-        canvas.width  = vp.width;
-        canvas.height = vp.height;
-        await page.render({ canvasContext: ctx, viewport: vp }).promise;
+        // Render ทุกหน้าลง container (หน้า 1 = canvas เดิม, หน้าถัดไป = canvas ใหม่)
+        const mainCanvas = document.getElementById('signature-pdf-canvas');
+        const pdfTask    = pdfjsLib.getDocument({ data: new Uint8Array(sigState.pdfBytes) });
+        const pdfDocView = await pdfTask.promise;
+        const numPages   = pdfDocView.numPages;
+
+        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+            const pg = await pdfDocView.getPage(pageNum);
+            const vp = pg.getViewport({ scale: sigState.scale });
+
+            let canvas;
+            if (pageNum === 1) {
+                canvas = mainCanvas;
+            } else {
+                canvas = document.createElement('canvas');
+                canvas.className = 'pdf-page-canvas shadow-md bg-white';
+                canvas.dataset.pageIndex = pageNum - 1;
+                container.appendChild(canvas);
+            }
+            canvas.width  = vp.width;
+            canvas.height = vp.height;
+            await pg.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+            sigState.pageCanvases.push(canvas);
+        }
 
         // เริ่มต้น SignaturePad (ต้อง delay เล็กน้อยเพื่อให้ canvas render เสร็จก่อน)
         setTimeout(_initSignaturePad, 100);
@@ -179,9 +196,12 @@ async function openSignatureSystem(pdfUrl, documentId, title = '✍️ ลงน
 
 function closeSignatureModal() {
     document.getElementById('signature-modal').classList.add('hidden');
-    // เคลียร์ placements
     sigState.placements.forEach(p => { try { p.el.remove(); } catch(e) {} });
     sigState.placements = [];
+    // ลบ canvases หน้า 2+ ที่สร้างแบบ dynamic
+    document.getElementById('signature-pdf-container')
+        ?.querySelectorAll('.pdf-page-canvas').forEach(el => el.remove());
+    sigState.pageCanvases = [];
 }
 
 // ============================================================
@@ -240,11 +260,12 @@ function clearAllSignaturePlacements() {
 }
 
 function _createSignaturePlacement(dataURL) {
-    const container = document.getElementById('signature-pdf-container');
-    const canvas    = document.getElementById('signature-pdf-canvas');
+    const container   = document.getElementById('signature-pdf-container');
+    const firstCanvas = (sigState.pageCanvases?.[0]) || document.getElementById('signature-pdf-canvas');
+    if (!container || !firstCanvas) return; // modal ยังไม่ถูกเปิด
 
     // ตำแหน่งเริ่มต้น: กลางพื้นที่ที่มองเห็น
-    const initLeft = canvas.offsetLeft + Math.max(0, (canvas.offsetWidth  - 120) / 2);
+    const initLeft = firstCanvas.offsetLeft + Math.max(0, (firstCanvas.offsetWidth  - 120) / 2);
     const initTop  = container.scrollTop + Math.max(60, (container.clientHeight / 2) - 30);
 
     const el = document.createElement('div');
@@ -384,39 +405,54 @@ async function applySignatureToPdf() {
     }
     try {
         toggleLoader('btn-confirm-signature', true);
+        if (typeof ensureFirebaseAuth === 'function') await ensureFirebaseAuth();
 
         // ── 1. คำนวณตำแหน่งและฝังลายเซ็นลง PDF ──
-        // Snapshot ตำแหน่งจริงบนจอก่อน await เพื่อป้องกัน scroll เปลี่ยนค่า
-        const canvas     = document.getElementById('signature-pdf-canvas');
-        const canvasRect = canvas.getBoundingClientRect();
+        // Snapshot bounding rects ก่อน await เพื่อป้องกัน scroll เปลี่ยนค่า
+        const pageCanvases  = sigState.pageCanvases?.length
+            ? sigState.pageCanvases
+            : [document.getElementById('signature-pdf-canvas')];
+        const pageRects = pageCanvases.map(c => c.getBoundingClientRect());
 
         const placementSnapshots = sigState.placements.map(({ el, sigDataURL }) => {
-            const elRect = el.getBoundingClientRect();
+            const elRect    = el.getBoundingClientRect();
+            const elCenterY = elRect.top + elRect.height / 2;
+
+            // หาว่า placement อยู่บนหน้าไหน
+            let pageIdx = pageRects.length - 1;
+            for (let i = 0; i < pageRects.length; i++) {
+                if (elCenterY <= pageRects[i].bottom) { pageIdx = i; break; }
+            }
+
+            const cr = pageRects[pageIdx];
             return {
                 sigDataURL,
-                xInCanvas: elRect.left - canvasRect.left,
-                yInCanvas: elRect.top  - canvasRect.top,
+                pageIdx,
+                xInCanvas: elRect.left - cr.left,
+                yInCanvas: elRect.top  - cr.top,
                 sigCssW:   elRect.width,
                 sigCssH:   elRect.height,
+                canvasW:   cr.width,
+                canvasH:   cr.height,
             };
         });
 
         const pdfDoc  = await PDFLib.PDFDocument.load(sigState.pdfBytes);
-        const page    = pdfDoc.getPages()[0];
-        const pdfW    = page.getWidth();
-        const pdfH    = page.getHeight();
-        // อัตราส่วน CSS pixel → PDF point (ตาม canvas ที่แสดงจริงบนจอ)
-        const ratioX  = pdfW / canvasRect.width;
-        const ratioY  = pdfH / canvasRect.height;
+        const pdfPages = pdfDoc.getPages();
 
-        for (const { sigDataURL, xInCanvas, yInCanvas, sigCssW, sigCssH } of placementSnapshots) {
-            // ขนาดลายเซ็นใน PDF units สัดส่วนเดียวกับที่เห็นบนจอ
-            const sigPdfW = sigCssW * ratioX;
-            const sigPdfH = sigCssH * ratioY;
+        for (const { sigDataURL, pageIdx, xInCanvas, yInCanvas, sigCssW, sigCssH, canvasW, canvasH } of placementSnapshots) {
+            const pg     = pdfPages[pageIdx] || pdfPages[0];
+            const pdfW   = pg.getWidth();
+            const pdfH   = pg.getHeight();
+            const ratioX = pdfW / canvasW;
+            const ratioY = pdfH / canvasH;
+
+            const sigPdfW = sigCssW  * ratioX;
+            const sigPdfH = sigCssH  * ratioY;
             const pdfX    = xInCanvas * ratioX;
             const pdfY    = pdfH - (yInCanvas * ratioY) - sigPdfH;
             const img     = await pdfDoc.embedPng(sigDataURL);
-            page.drawImage(img, { x: pdfX, y: pdfY, width: sigPdfW, height: sigPdfH });
+            pg.drawImage(img, { x: pdfX, y: pdfY, width: sigPdfW, height: sigPdfH });
         }
 
         const finalBytes  = await pdfDoc.save();
@@ -450,12 +486,21 @@ async function applySignatureToPdf() {
         if (nextStatus === 'waiting_admin_final') {
             // Update Firestore with Firebase Storage URL
             await db.collection('requests').doc(safeId).set({
-                pdfUrl: newPdfUrl,
-                currentPdfUrl: newPdfUrl,
-                memoPdfUrl: newPdfUrl,
+                pdfUrl:           newPdfUrl,
+                currentPdfUrl:    newPdfUrl,
+                memoPdfUrl:       newPdfUrl,
+                completedMemoUrl: newPdfUrl,   // sync ให้ผู้อนุมัติถัดไปเห็นไฟล์รวมล่าสุด
                 docStatus: 'waiting_admin_final',
                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
             }, { merge: true });
+
+            // Sync กลับ Google Sheets ด้วย เพื่อไม่ให้ docStatus ระหว่าง Firestore/Sheets หลุดกัน
+            apiCall('POST', 'updateRequest', {
+                requestId:        docId,
+                pdfUrl:           newPdfUrl,
+                completedMemoUrl: newPdfUrl,
+                docStatus:        'waiting_admin_final',
+            }).catch(e => console.warn('Sheet update error:', e));
 
             // Notify
             if (window._currentSignToken) {
@@ -472,10 +517,11 @@ async function applySignatureToPdf() {
         if (typeof db !== 'undefined') {
             const effectiveRole = user?._approverRole || user?.role || '';
             const update = {
-                pdfUrl:        newPdfUrl,
-                currentPdfUrl: newPdfUrl,
-                memoPdfUrl:    newPdfUrl,
-                lastUpdated:   firebase.firestore.FieldValue.serverTimestamp(),
+                pdfUrl:           newPdfUrl,
+                currentPdfUrl:    newPdfUrl,
+                memoPdfUrl:       newPdfUrl,
+                completedMemoUrl: newPdfUrl,   // sync ให้ผู้อนุมัติถัดไปเห็นไฟล์รวมล่าสุด
+                lastUpdated:      firebase.firestore.FieldValue.serverTimestamp(),
             };
             if (nextStatus) update.docStatus = nextStatus;
             if (effectiveRole) {

@@ -212,10 +212,10 @@ async function handleTokenSignFlow(token) {
 
         const req    = reqDoc.data();
         // ★ ลำดับความสำคัญ:
-        //   1. currentPdfUrl  = ไฟล์ล่าสุดที่มีลายเซ็นสะสม (จากการลงนามรอบก่อน)
-        //   2. completedMemoUrl = ไฟล์ที่ผู้ใช้อัพโหลดเอง (บันทึกข้อความจริง)
-        //   3. pdfUrl / memoPdfUrl = Cloud Run สร้าง (fallback เท่านั้น)
-        const pdfUrl = req.currentPdfUrl || req.completedMemoUrl || req.pdfUrl || req.memoPdfUrl || '';
+        //   1. completedMemoUrl = ไฟล์รวมทุกเอกสาร (บันทึก + แนบ) — อัปเดตทุกรอบลงนาม
+        //   2. currentPdfUrl   = ไฟล์ล่าสุดหลังเซ็น (fallback ถ้า completedMemoUrl ยังไม่มี)
+        //   3. pdfUrl / memoPdfUrl = Cloud Run สร้าง (fallback สุดท้าย)
+        const pdfUrl = req.completedMemoUrl || req.currentPdfUrl || req.pdfUrl || req.memoPdfUrl || '';
         if (!pdfUrl) throw new Error("ไม่พบไฟล์ PDF ของเอกสาร");
 
         // แสดงข้อมูลเอกสาร

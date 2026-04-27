@@ -17,7 +17,7 @@ body {
   display: flex;
   flex-direction: column;
   /* โทนเดียวกับหน้าแอปหลัก: from-pink-100 to-blue-200 */
-  background: linear-gradient(135deg, #fce7f3 0%, #e0d7f8 40%, #bfdbfe 100%);
+  background: linear-gradient(135deg, #fdf2f8 0%, #f3e8ff 46%, #e0e7ff 100%);
   color: #1e293b;
 }
 
@@ -41,12 +41,12 @@ body {
 }
 .page::before {
   width: 500px; height: 500px;
-  background: rgba(199,210,254,.55);
+  background: rgba(196,181,253,.52);
   top: -120px; right: -100px;
 }
 .page::after {
   width: 420px; height: 420px;
-  background: rgba(251,207,232,.5);
+  background: rgba(244,114,182,.16);
   bottom: -80px; left: -100px;
 }
 
@@ -62,7 +62,7 @@ body {
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
   border-bottom: 1px solid rgba(255,255,255,.5);
-  box-shadow: 0 2px 12px rgba(99,102,241,.08);
+  box-shadow: 0 10px 24px rgba(99,102,241,.08);
 }
 .topbar-brand {
   display: flex; align-items: center; gap: 12px;
@@ -78,12 +78,12 @@ body {
 .topbar-name-en  { font-size: 11px; color: #94a3b8; font-weight: 400; }
 .topbar-login {
   display: inline-flex; align-items: center; gap: 7px;
-  background: linear-gradient(135deg, #4f46e5, #2563eb);
+  background: linear-gradient(135deg, #818cf8 0%, #6366f1 45%, #7c3aed 100%);
   color: #fff;
   padding: 9px 20px; border-radius: 10px;
   font-size: 13.5px; font-weight: 700;
   text-decoration: none; font-family: inherit;
-  box-shadow: 0 4px 14px rgba(79,70,229,.35);
+  box-shadow: 0 8px 18px rgba(99,102,241,.26);
   transition: opacity .2s, transform .15s;
 }
 .topbar-login:hover { opacity: .88; transform: translateY(-1px); }
@@ -103,7 +103,7 @@ body {
   width: 100px; height: 100px;
   object-fit: contain;
   margin-bottom: 20px;
-  filter: drop-shadow(0 4px 16px rgba(99,102,241,.25));
+  filter: drop-shadow(0 8px 20px rgba(99,102,241,.18));
 }
 .hero-school {
   font-size: 13px; font-weight: 500;
@@ -135,7 +135,7 @@ body {
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
   border: 1px solid rgba(255,255,255,.75);
-  box-shadow: 0 8px 32px rgba(99,102,241,.1), 0 1px 4px rgba(0,0,0,.04);
+  box-shadow: 0 16px 34px rgba(99,102,241,.08), 0 1px 4px rgba(0,0,0,.04);
   border-radius: 20px;
   padding: 28px 24px 22px;
   text-decoration: none; color: #1e293b;
@@ -144,7 +144,7 @@ body {
 }
 .card:hover {
   transform: translateY(-5px);
-  box-shadow: 0 20px 48px rgba(99,102,241,.18), 0 2px 8px rgba(0,0,0,.06);
+  box-shadow: 0 22px 48px rgba(99,102,241,.14), 0 2px 8px rgba(0,0,0,.05);
   border-color: rgba(199,210,254,.9);
 }
 .card-emoji { font-size: 36px; line-height: 1; margin-bottom: 4px; }
@@ -167,9 +167,9 @@ body {
 }
 .card:hover .card-go { background: rgba(226,232,240,.9); }
 .card.card-main .card-go {
-  background: linear-gradient(135deg, #4f46e5, #2563eb);
+  background: linear-gradient(135deg, #818cf8 0%, #6366f1 45%, #7c3aed 100%);
   border-color: transparent; color: #fff;
-  box-shadow: 0 4px 14px rgba(79,70,229,.3);
+  box-shadow: 0 8px 18px rgba(99,102,241,.24);
 }
 .card.card-main:hover .card-go { opacity: .9; }
 
@@ -264,8 +264,8 @@ footer {
     >
 
     <div class="hero-school">โรงเรียนวังน้ำเย็นวิทยาคม · สระแก้ว</div>
-    <h1>ระบบขออนุญาตไปราชการ<br></h1>
-    <p class="hero-desc">บริหารจัดการเอกสารไปราชการออนไลน์ครบวงจร<br>สำหรับบุคลากรทุกท่าน</p>
+    <h1>ระบบไปราชการออนไลน์<br></h1>
+    <p class="hero-desc">เว็บไซต์เดียวสำหรับยื่นคำขอไปราชการและค้นหาคลังข้อมูลย้อนหลัง<br>เลือกเข้าใช้งานได้ 2 ทางตามบทบาทของผู้ใช้งาน</p>
 
     <!-- CARDS -->
     <div class="cards">
@@ -273,9 +273,9 @@ footer {
       <!-- ระบบไปราชการ (หลัก) -->
       <a href="./app/" class="card card-main">
         <div class="card-emoji">✈️</div>
-        <div class="card-tag"><span class="card-tag-dot"></span> เปิดใช้งาน</div>
+        <div class="card-tag"><span class="card-tag-dot"></span> ทางเข้าภายในระบบ</div>
         <div class="card-title">ระบบไปราชการ</div>
-        <div class="card-desc">ยื่นคำขอ สร้าง PDF อนุมัติออนไลน์<br>และรับเอกสารสมบูรณ์</div>
+        <div class="card-desc">สำหรับบุคลากรที่ต้องเข้าสู่ระบบ<br>เพื่อยื่นคำขอ ติดตามสถานะ และจัดการเอกสาร</div>
         <div class="card-go">
           <span>เข้าสู่ระบบ</span>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -285,9 +285,9 @@ footer {
       <!-- คลังข้อมูล -->
       <a href="./archive/" class="card">
         <div class="card-emoji">📚</div>
-        <div class="card-tag"><span class="card-tag-dot"></span> เปิดใช้งาน</div>
+        <div class="card-tag"><span class="card-tag-dot"></span> ทางเข้าคลังข้อมูล</div>
         <div class="card-title">คลังข้อมูลย้อนหลัง</div>
-        <div class="card-desc">ค้นหาและดาวน์โหลดเอกสารทุกรายการ<br>ไม่ต้อง Login</div>
+        <div class="card-desc">สำหรับค้นหาและเปิดเอกสารย้อนหลัง<br>เข้าใช้งานได้ทันทีโดยไม่ต้อง Login</div>
         <div class="card-go">
           <span>เปิดคลัง</span>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -325,7 +325,8 @@ footer {
 </div><!-- /page -->
 
 <script>
-document.getElementById('yr').textContent = new Date().getFullYear() + 543;
+const yearEl = document.getElementById('yr');
+if (yearEl) yearEl.textContent = new Date().getFullYear() + 543;
 </script>
 </body>
 </html>

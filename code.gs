@@ -697,6 +697,7 @@ function getDraftRequest(payload) {
       requesterName: originalRequest.requesterName,
       requesterPosition: originalRequest.requesterPosition,
       location: originalRequest.location,
+      province: originalRequest.province || "",
       purpose: originalRequest.purpose,
       startDate: originalRequest.startDate,
       endDate: originalRequest.endDate,
@@ -706,11 +707,44 @@ function getDraftRequest(payload) {
       totalExpense: originalRequest.totalExpense,
       vehicleOption: originalRequest.vehicleOption,
       licensePlate: originalRequest.licensePlate,
+      startTime: originalRequest.startTime || "",
+      endTime: originalRequest.endTime || "",
+      stayAt: originalRequest.stayAt || "",
+      dispatchVehicleType: originalRequest.dispatchVehicleType || "",
+      dispatchVehicleId: originalRequest.dispatchVehicleId || "",
+      dispatchMonth: originalRequest.dispatchMonth || "",
+      dispatchYear: originalRequest.dispatchYear || "",
+      studentCount: originalRequest.studentCount || "",
+      teacherCount: originalRequest.teacherCount || "",
+      qty1: originalRequest.qty1 || "",
+      qty2: originalRequest.qty2 || "",
+      qty3: originalRequest.qty3 || "",
+      qty4: originalRequest.qty4 || "",
+      qty5: originalRequest.qty5 || "",
+      qty6: originalRequest.qty6 || "",
+      qty7: originalRequest.qty7 || "",
+      dispatchBookUrl: originalRequest.dispatchBookUrl || "",
+      dispatchBookPdfUrl: originalRequest.dispatchBookPdfUrl || "",
+      commandTemplateType: originalRequest.commandTemplateType || "",
       department: originalRequest.department,
       headName: originalRequest.headName,
     };
   }
   return null;
+}
+
+function stripProvincePrefix_(provinceValue) {
+  const rawValue = String(provinceValue || "").trim();
+  if (!rawValue) return "";
+  if (rawValue === "กรุงเทพมหานคร") return rawValue;
+  return rawValue.replace(/^จังหวัด\s*/u, "").trim();
+}
+
+function normalizeProvinceLabel_(provinceValue) {
+  const plainProvince = stripProvincePrefix_(provinceValue);
+  if (!plainProvince) return "";
+  if (plainProvince === "กรุงเทพมหานคร") return plainProvince;
+  return `จังหวัด${plainProvince}`;
 }
 
 function getAllDraftRequests() {
@@ -1190,8 +1224,21 @@ function saveRequestAndGeneratePdf(payload) {
     // ★★★ ฟิลด์ใหม่ที่เพิ่มเข้ามา (ต้องใส่ให้ครบไม่งั้นหาย) ★★★
     dispatchbookpdfurl:
       payload.dispatchBookPdfUrl || currentData.dispatchbookpdfurl,
-    province: payload.province || currentData.province,
+    province: normalizeProvinceLabel_(payload.province || currentData.province),
     stayat: payload.stayAt || currentData.stayat,
+    starttime: payload.startTime || currentData.starttime,
+    endtime: payload.endTime || currentData.endtime,
+    dispatchmonth: payload.dispatchMonth || currentData.dispatchmonth,
+    dispatchyear: payload.dispatchYear || currentData.dispatchyear,
+    studentcount: payload.studentCount || currentData.studentcount,
+    teachercount: payload.teacherCount || currentData.teachercount,
+    qty1: payload.qty1 || currentData.qty1,
+    qty2: payload.qty2 || currentData.qty2,
+    qty3: payload.qty3 || currentData.qty3,
+    qty4: payload.qty4 || currentData.qty4,
+    qty5: payload.qty5 || currentData.qty5,
+    qty6: payload.qty6 || currentData.qty6,
+    qty7: payload.qty7 || currentData.qty7,
     dispatchvehicletype:
       payload.dispatchVehicleType || currentData.dispatchvehicletype,
     dispatchvehicleid:
@@ -1250,6 +1297,7 @@ function approveCommand(payload) {
     requesterName,
     requesterPosition,
     location,
+    province,
     purpose,
     startDate,
     endDate,
@@ -1266,10 +1314,12 @@ function approveCommand(payload) {
     department,
     headName,
   } = payload;
+  const normalizedProvince = normalizeProvinceLabel_(province);
 
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const requestSheet = ss.getSheetByName("Requests");
   const attendeesSheet = ss.getSheetByName("Attendees");
+  ensureSheetColumns(requestSheet, ["Province", "CommandTemplateType"]);
 
   const data = requestSheet.getDataRange().getValues();
   const headers = data[0];
@@ -1291,6 +1341,8 @@ function approveCommand(payload) {
   updateCell("RequesterName", requesterName);
   updateCell("RequesterPosition", requesterPosition);
   updateCell("Location", location);
+  updateCell("Province", normalizedProvince);
+  updateCell("CommandTemplateType", templateType);
   updateCell("Purpose", purpose);
   updateCell("StartDate", startDate);
   updateCell("EndDate", endDate);
@@ -1543,15 +1595,16 @@ function generateDispatchBook(payload) {
     const docNumber = requestId.split("/")[0].replace("บค", "");
 
     const pdfPayload = {
-      requesterName: requestDataObject.RequesterName,
-      docDate: requestDataObject.DocDate,
-      startDate: requestDataObject.StartDate,
-      endDate: requestDataObject.EndDate,
-      purpose: requestDataObject.Purpose,
-      location: requestDataObject.Location,
-      requesterPosition: requestDataObject.RequesterPosition,
-      department: requestDataObject.Department,
-      headName: requestDataObject.HeadName,
+        requesterName: requestDataObject.RequesterName,
+        docDate: requestDataObject.DocDate,
+        startDate: requestDataObject.StartDate,
+        endDate: requestDataObject.EndDate,
+        purpose: requestDataObject.Purpose,
+        location: requestDataObject.Location,
+        province: normalizeProvinceLabel_(requestDataObject.Province || ""),
+        requesterPosition: requestDataObject.RequesterPosition,
+        department: requestDataObject.Department,
+        headName: requestDataObject.HeadName,
       vehicleOption: requestDataObject.VehicleOption,
       licensePlate: requestDataObject.LicensePlate,
       expenseOption: requestDataObject.ExpenseOption,
@@ -1696,6 +1749,7 @@ function createPdfFromTemplate(
   replace("requester_name", data.requesterName);
   replace("requester_position", data.requesterPosition);
   replace("location", data.location);
+  replace("province", normalizeProvinceLabel_(data.province || ""));
   replace("purpose", data.purpose);
   replace("date_range", formatDateRangeThai(data.startDate, data.endDate));
   replace("duration", duration);
@@ -1892,6 +1946,7 @@ function sheetToObject(sheet) {
         if (key === "docurl") key = "docUrl";
         if (key === "commandpdfurl") key = "commandPdfUrl";
         if (key === "commandstatus") key = "commandStatus";
+        if (key === "commandtemplatetype") key = "commandTemplateType";
         if (key === "commandpdfurlsolo") key = "commandPdfUrlSolo";
         if (key === "commanddocurlsolo") key = "commandDocUrlSolo";
         // URL ไฟล์ที่สำคัญ — ต้อง map camelCase ให้ตรงกับที่ frontend อ่าน
@@ -2592,8 +2647,14 @@ function uploadGeneratedFile(payload) {
     );
     const file = userFolder.createFile(blob);
 
-    // ★★★ เพิ่มบรรทัดนี้ เพื่อให้ทุกคนที่มีลิงก์เปิดดูไฟล์ได้ ★★★
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    try {
+      file.setSharing(
+        DriveApp.Access.ANYONE_WITH_LINK,
+        DriveApp.Permission.VIEW,
+      );
+    } catch (shareError) {
+      Logger.log("setSharing skipped: " + shareError.message);
+    }
 
     return {
       status: "success",
@@ -2836,16 +2897,25 @@ function updateRequest(payload) {
         continue;
 
       // ✅ แก้ไข GAS-BUG-007: ข้าม Array/Object เพื่อป้องกันการบันทึก "[object Object]" ลงชีท
-      const val = payload[key];
+      let val = payload[key];
       if (typeof val === "object" && val !== null) continue;
+      if (key.toLowerCase() === "province") {
+        val = normalizeProvinceLabel_(val);
+      }
 
       setVal(key, val);
     }
   }
 
   // --- แก้ไขช่วง B. จัดการลิงก์ไฟล์ ---
+  const shouldSkipPdfUrlUpdate =
+    payload.skipPdfUrlUpdate === true ||
+    payload.skipPdfUrlUpdate === "true" ||
+    payload.preGeneratedPdfUrl === "SKIP_GENERATION";
   const pdfUrlValue =
-    payload.pdfUrl || payload.fileUrl || payload.preGeneratedPdfUrl;
+    payload.pdfUrl ||
+    payload.fileUrl ||
+    (shouldSkipPdfUrlUpdate ? "" : payload.preGeneratedPdfUrl);
 
   if (pdfUrlValue) {
     setVal("PdfUrl", pdfUrlValue); // ช่องหลัก
@@ -2963,13 +3033,15 @@ function createAutoMemoRecord(requestId, username) {
  */
 function batchSyncFromFirestore(payload) {
   try {
-    const { requests, year, syncedAt } = payload;
+    const { requests, memos, year, syncedAt } = payload;
     if (!requests || !Array.isArray(requests) || requests.length === 0) {
       return { status: "success", message: "ไม่มีข้อมูลที่จะ sync", count: 0 };
     }
 
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const requestSheet = ss.getSheetByName("Requests");
+    const attendeesSheet = ss.getSheetByName("Attendees");
+    const memosSheet = ss.getSheetByName("Memos");
     ensureSheetColumns(requestSheet, [
       "RequestId",
       "CreatedBy",
@@ -3000,6 +3072,19 @@ function batchSyncFromFirestore(payload) {
       "SyncedFromFirestore",
       "FirestoreSyncedAt",
     ]);
+    ensureSheetColumns(attendeesSheet, ["RequestId", "FullName", "Position", "DocDate"]);
+    ensureSheetColumns(memosSheet, [
+      "MemoID",
+      "SubmittedBy",
+      "RefNumber",
+      "Status",
+      "Timestamp",
+      "FileID",
+      "FileURL",
+      "CompletedMemoUrl",
+      "CompletedCommandUrl",
+      "DispatchBookUrl",
+    ]);
 
     const headers = requestSheet
       .getRange(1, 1, 1, requestSheet.getLastColumn())
@@ -3016,10 +3101,14 @@ function batchSyncFromFirestore(payload) {
 
     let upsertedCount = 0;
     let insertedCount = 0;
+    let attendeeCount = 0;
+    let memoUpsertedCount = 0;
+    const syncedRequestIds = new Set();
 
     for (const req of requests) {
       const requestId = req.id || req.requestId;
       if (!requestId) continue;
+      syncedRequestIds.add(String(requestId).trim());
 
       const formatDate = (d) => {
         if (!d) return "";
@@ -3060,7 +3149,7 @@ function batchSyncFromFirestore(payload) {
         commandstatus: req.commandStatus || "",
         status: req.status || "กำลังดำเนินการ",
         dispatchbookpdfurl: req.dispatchBookUrl || req.dispatchBookPdfUrl || "",
-        province: req.province || "",
+        province: normalizeProvinceLabel_(req.province || ""),
         stayat: req.stayAt || "",
         completedmemourl: req.completedMemoUrl || "",
         timestamp: formatDate(req.timestamp || req.docDate),
@@ -3068,9 +3157,28 @@ function batchSyncFromFirestore(payload) {
         firestoresyncedat: syncedAt || new Date().toISOString(),
       };
 
+      let existingRowMap = {};
+      if (existingIds.has(requestId)) {
+        const existingRowIdx = existingData.findIndex(
+          (r) => String(r[idCol]).trim() === requestId,
+        );
+        if (existingRowIdx > 0) {
+          headers.forEach((header, index) => {
+            existingRowMap[header.toLowerCase().replace(/\s+/g, "")] =
+              existingData[existingRowIdx][index];
+          });
+        }
+      }
+
       const rowData = headers.map((h) => {
         const key = h.toLowerCase().replace(/\s+/g, "");
-        return rowObject[key] !== undefined ? rowObject[key] : "";
+        const incoming = rowObject[key];
+        const current = existingRowMap[key];
+
+        if (incoming === undefined || incoming === null || incoming === "") {
+          return current !== undefined ? current : "";
+        }
+        return incoming;
       });
 
       if (existingIds.has(requestId)) {
@@ -3092,14 +3200,126 @@ function batchSyncFromFirestore(payload) {
       }
     }
 
+    if (attendeesSheet && syncedRequestIds.size > 0) {
+      const attendeeData = attendeesSheet.getDataRange().getValues();
+      const attendeeHeaders = attendeeData[0] || [];
+      const attendeeRequestIdCol = findColumnIndex(attendeeHeaders, "RequestId");
+
+      if (attendeeRequestIdCol > -1) {
+        const rowsToDelete = [];
+        for (let i = 1; i < attendeeData.length; i++) {
+          const rowRequestId = String(attendeeData[i][attendeeRequestIdCol] || "").trim();
+          if (syncedRequestIds.has(rowRequestId)) rowsToDelete.push(i + 1);
+        }
+        for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+          attendeesSheet.deleteRow(rowsToDelete[i]);
+        }
+      }
+
+      const formatDate = (d) => {
+        if (!d) return "";
+        try {
+          return Utilities.formatDate(new Date(d), "Asia/Bangkok", "yyyy-MM-dd");
+        } catch (e) {
+          return "";
+        }
+      };
+
+      const attendeeRows = [];
+      requests.forEach((req) => {
+        const requestId = String(req.id || req.requestId || "").trim();
+        if (!requestId) return;
+
+        let attendees = req.attendees || [];
+        if (typeof attendees === "string") {
+          try {
+            attendees = JSON.parse(attendees);
+          } catch (e) {
+            attendees = [];
+          }
+        }
+        if (!Array.isArray(attendees)) return;
+
+        attendees.forEach((att) => {
+          const fullName = String(att?.name || att?.fullName || att?.["ชื่อ-นามสกุล"] || "").trim();
+          const position = String(att?.position || att?.["ตำแหน่ง"] || "").trim();
+          if (!fullName) return;
+          attendeeRows.push([requestId, fullName, position, formatDate(req.docDate)]);
+        });
+      });
+
+      if (attendeeRows.length > 0) {
+        attendeesSheet
+          .getRange(attendeesSheet.getLastRow() + 1, 1, attendeeRows.length, attendeeRows[0].length)
+          .setValues(attendeeRows);
+      }
+      attendeeCount = attendeeRows.length;
+    }
+
+    if (memosSheet && Array.isArray(memos) && memos.length > 0) {
+      const memoHeaders = memosSheet.getRange(1, 1, 1, memosSheet.getLastColumn()).getValues()[0];
+      const memoData = memosSheet.getDataRange().getValues();
+      const refNumberCol = findColumnIndex(memoHeaders, "RefNumber");
+      const memoIndex = new Map();
+
+      if (refNumberCol > -1) {
+        for (let i = 1; i < memoData.length; i++) {
+          const refNumber = String(memoData[i][refNumberCol] || "").trim();
+          if (refNumber) memoIndex.set(refNumber, i + 1);
+        }
+      }
+
+      const formatDateTime = (d) => {
+        if (!d) return "";
+        try {
+          return Utilities.formatDate(new Date(d), "Asia/Bangkok", "yyyy-MM-dd'T'HH:mm:ss");
+        } catch (e) {
+          return d;
+        }
+      };
+
+      memos.forEach((memo) => {
+        const refNumber = String(memo.refNumber || memo.id || "").trim();
+        if (!refNumber) return;
+
+        const rowObject = {
+          memoid: memo.memoId || memo.id || `MEMO-${refNumber}`,
+          submittedby: memo.submittedBy || memo.username || "",
+          refnumber: refNumber,
+          status: memo.status || "",
+          timestamp: formatDateTime(memo.timestamp || memo.lastUpdated || syncedAt),
+          fileid: memo.fileId || "",
+          fileurl: memo.fileURL || memo.fileUrl || memo.pdfUrl || memo.completedMemoUrl || "",
+          completedmemourl: memo.completedMemoUrl || "",
+          completedcommandurl: memo.completedCommandUrl || "",
+          dispatchbookurl: memo.dispatchBookUrl || "",
+        };
+
+        const rowData = memoHeaders.map((h) => {
+          const key = h.toLowerCase().replace(/\s+/g, "");
+          return rowObject[key] !== undefined ? rowObject[key] : "";
+        });
+
+        const existingRow = memoIndex.get(refNumber);
+        if (existingRow) {
+          memosSheet.getRange(existingRow, 1, 1, rowData.length).setValues([rowData]);
+        } else {
+          memosSheet.appendRow(rowData);
+        }
+        memoUpsertedCount++;
+      });
+    }
+
     Logger.log(
-      `✅ Batch sync complete: ${insertedCount} inserted, ${upsertedCount} updated`,
+      `✅ Batch sync complete: ${insertedCount} inserted, ${upsertedCount} updated, ${attendeeCount} attendees, ${memoUpsertedCount} memos`,
     );
     return {
       status: "success",
-      message: `Sync เสร็จสิ้น: เพิ่มใหม่ ${insertedCount} รายการ, อัปเดต ${upsertedCount} รายการ`,
+      message: `Sync เสร็จสิ้น: Requests เพิ่มใหม่ ${insertedCount} รายการ, อัปเดต ${upsertedCount} รายการ, Attendees ${attendeeCount} รายการ, Memos ${memoUpsertedCount} รายการ`,
       inserted: insertedCount,
       updated: upsertedCount,
+      attendees: attendeeCount,
+      memos: memoUpsertedCount,
       total: insertedCount + upsertedCount,
     };
   } catch (error) {

@@ -31,7 +31,7 @@ const PDF_ENGINE_CONFIG = {
         COMMAND_SOLO: 'template_command_solo.docx',
         COMMAND_SMALL: 'template_command_small.docx',
         COMMAND_LARGE: 'template_command_large.docx',
-        DISPATCH: 'template_dispatch.docx'
+        DISPATCH: 'แม่แบบหนังสือส่งใหม่.docx'
     }
 };
 // 3. Initialize Firebase & Hybrid Mode
@@ -49,13 +49,13 @@ try {
         // Initialize Firebase Storage
         if (firebaseConfig.storageBucket) {
             try {
-                storage = firebase.storage();
+                window.storage = firebase.storage();
                 console.log("📦 Firebase Storage initialized");
             } catch(e) {
                 console.warn("⚠️ Firebase Storage init failed:", e.message);
             }
         }
-    } else {
+    } else if (document.getElementById('login-view')) {
         console.error("❌ Firebase SDK not found. Please check index.html");
     }
 } catch (error) {
@@ -63,7 +63,7 @@ try {
 }
 
 // 4. Google Apps Script URL (Backend เดิม)
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxHffk5rLHflg669FsZysd8GUPe490NzSvCeRToOra_F3G4TtAfxU2ldVZxcPqsSEZo/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxRK-XX8Kk4TdMPRSa1Wy9fu9obubLQ1uPmBmd-S4QTQiAe2zKgU6v3_i1UtTpIjpJW/exec";
 
 // Global State
 let allRequestsCache = [];

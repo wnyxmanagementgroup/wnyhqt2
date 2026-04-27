@@ -40,16 +40,33 @@ async function handleLogin(e) {
             // ★★★ แก้ไข: ใช้ ID จริง (realUser.username) แทนสิ่งที่พิมพ์ (usernameInput) ★★★
             // เช่น พิมพ์ 'kong' แต่ realUser.username คือ 'admin' -> เราจะใช้ 'admin'
             
-            // อัปเดตข้อมูลลง Firestore ให้ตรงกัน
-            if (typeof firebase !== 'undefined' && firebase.auth().currentUser) {
-                const uid = firebase.auth().currentUser.uid;
-                await firebase.firestore().collection('users').doc(uid).set({
-                    username: realUser.username, // ใช้ ID หลัก
-                    loginName: realUser.loginName || usernameInput, // เก็บชื่อล็อกอินไว้ดูต่างหาก
-                    fullName: realUser.fullName,
-                    role: realUser.role,
+            // ★ ต้อง ensureFirebaseAuth ก่อน เพื่อให้มี Firebase UID (email หรือ anonymous)
+            if (typeof ensureFirebaseAuth === 'function') await ensureFirebaseAuth();
+
+            const _fbUser = typeof firebase !== 'undefined' ? firebase.auth().currentUser : null;
+            if (_fbUser) {
+                const userDocRef = firebase.firestore().collection('users').doc(_fbUser.uid);
+                const payload = {
+                    username:  realUser.username,
+                    loginName: realUser.loginName || usernameInput,
+                    fullName:  realUser.fullName,
+                    role:      realUser.role,
                     lastLogin: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
+                };
+                try {
+                    // ลอง write ทั้ง role (สำเร็จถ้า doc ใหม่ หรือ role ไม่เปลี่ยน)
+                    await userDocRef.set(payload, { merge: true });
+                } catch (_roleErr) {
+                    // ถ้า blocked (role ต่างจากเดิม) → write แค่ field ที่ไม่ใช่ role
+                    try {
+                        await userDocRef.set({
+                            username:  realUser.username,
+                            loginName: realUser.loginName || usernameInput,
+                            fullName:  realUser.fullName,
+                            lastLogin: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+                    } catch (_) { /* ไม่ทำให้ login หยุด */ }
+                }
             }
 
             // บันทึกลง Session Browser
@@ -129,12 +146,7 @@ async function initializeUserSession(user) {
     const adminEmailBackupBtn   = document.getElementById('admin-email-backup-btn');
     const archiveLinkBtn        = document.getElementById('archive-link-btn');
     const adminSectionLabel     = document.getElementById('admin-section-label');
-    const trashBinBtn           = document.getElementById('trash-bin-btn');
-
     const isAdmin = String(user.role).toLowerCase() === 'admin';
-
-    // ถังขยะ: แสดงสำหรับทุกคนที่ล็อกอินแล้ว
-    if (trashBinBtn) trashBinBtn.classList.remove('hidden');
 
     if (isAdmin) {
         if (adminBtnCommand)       adminBtnCommand.classList.remove('hidden');

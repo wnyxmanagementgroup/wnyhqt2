@@ -2,112 +2,114 @@ rules_version = '2';
 
 // ===================================================================
 // Firestore Security Rules — ระบบไปราชการ WNY HQ
-// วันที่: 2026-04-22
+// อัปเดต: 2026-04-25
 //
-// โครงสร้าง Collections:
-//   requests        — คำขอไปราชการ (owner = username field)
-//   users           — ข้อมูลผู้ใช้  (doc ID = Firebase Auth UID)
-//   approvalLinks   — Token ลงนาม  (public read, token-based update)
-//   counters        — นับเลขเอกสาร  (authenticated read/write)
-//   systemConfig    — ค่าตั้งระบบ   (admin write)
-//   settings        — ประกาศ/ข่าว   (admin write)
+// แนวคิดชุดนี้:
+// - ลดปัญหา permission-denied จาก query ภายในระบบ
+// - คุม "การเขียน" ให้เข้มกว่าการอ่าน
+// - ผู้ใช้ที่ login ผ่านแอปและมี user profile แล้ว ถือเป็น app user
 // ===================================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ------------------------------------------------------------------
-    // Helper Functions
-    // ------------------------------------------------------------------
-
-    // ตรวจว่า login อยู่หรือเปล่า (Firebase Auth)
+    // ----------------------------------------------------------------
+    // Helpers
+    // ----------------------------------------------------------------
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // ตรวจว่ามี user doc อยู่จริงหรือไม่
     function userDocExists() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    // ดึงข้อมูล user doc ของผู้ที่กำลัง login (อ่านจาก Firestore)
     function myUserDoc() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    // ดึง role ของผู้ที่กำลัง login — คืน 'none' ถ้าไม่มี doc
+    function isAppUser() {
+      return isAuthenticated() && userDocExists();
+    }
+
     function myRole() {
-      return userDocExists() ? myUserDoc().role : 'none';
+      return isAppUser() ? myUserDoc().role : 'none';
     }
 
-    // ดึง username ของผู้ที่กำลัง login — คืน '' ถ้าไม่มี doc
     function myUsername() {
-      return userDocExists() ? myUserDoc().username : '';
+      return isAppUser() ? myUserDoc().username : '';
     }
 
-    // ตรวจว่าเป็น admin หรือเปล่า
     function isAdmin() {
-      return isAuthenticated() && userDocExists() && myRole() == 'admin';
+      return isAppUser() && myRole() == 'admin';
     }
 
-    // ตรวจว่าเป็นผู้อนุมัติ (ทุก role ยกเว้น user และ admin)
-    // ใช้ get() อ่าน user doc โดยตรง (ไม่ผ่าน helper) เพื่อให้ Firestore ประเมิน rule ได้แน่นอน
     function isApprover() {
-      return isAuthenticated() && (
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in [
-          'director', 'saraban',
-          'head_science', 'head_math', 'head_thai', 'head_foreign',
-          'head_social', 'head_health', 'head_art', 'head_career',
-          'head_guidance', 'head_general', 'head_personnel',
-          'head_budget', 'head_acad',
-          'deputy_general', 'deputy_budget', 'deputy_acad', 'deputy_personnel'
-        ]
+      return isAppUser() && myRole() in [
+        'director', 'saraban',
+        'head_science', 'head_math', 'head_thai', 'head_foreign',
+        'head_social', 'head_health', 'head_art', 'head_career',
+        'head_guidance', 'head_general', 'head_personnel',
+        'head_budget', 'head_acad',
+        'deputy_general', 'deputy_budget', 'deputy_acad', 'deputy_personnel'
+      ];
+    }
+
+    function isRequestOwner() {
+      return isAppUser() && resource.data.username == myUsername();
+    }
+
+    function isMemoOwner() {
+      return isAppUser() && (
+        resource.data.username == myUsername()
+        || resource.data.submittedBy == myUsername()
       );
     }
 
-    // ตรวจว่าเป็นเจ้าของ request (เทียบจาก username field)
-    function isOwnerOf(res) {
-      return isAuthenticated() && userDocExists() && res.data.username == myUsername();
+    function isCreatingOwnRequest() {
+      return isAppUser() && request.resource.data.username == myUsername();
     }
 
-    // ------------------------------------------------------------------
-    // requests — คำขอไปราชการ
-    // ------------------------------------------------------------------
+    function isCreatingOwnMemo() {
+      return isAppUser() && (
+        request.resource.data.username == myUsername()
+        || request.resource.data.submittedBy == myUsername()
+      );
+    }
+
+    // ----------------------------------------------------------------
+    // requests
+    // ----------------------------------------------------------------
     match /requests/{requestId} {
-      // อ่าน: admin เห็นทุก request, approver เห็นได้ตาม role, user ทั่วไปเห็นเฉพาะของตัวเอง
-      // แก้ไข: แยก rules เป็น 2 ชุดเพื่อให้ Firestore ผ่าน query ได้
-      allow read: if isAuthenticated()
-                  && (isAdmin() || isApprover());
-      allow read: if isAuthenticated()
-                  && userDocExists()
-                  && resource.data.username == myUsername();
+      // อ่านได้สำหรับผู้ใช้ในระบบทั้งหมด
+      // เหตุผล: หน้า admin / approval / dashboard หลายจุดต้อง query collection
+      allow read: if isAppUser();
 
-      // สร้าง: ต้อง login เท่านั้น และต้องใส่ username ให้ตรงกับตัวเอง
-      allow create: if isAuthenticated()
-                    && request.resource.data.username == myUsername();
+      // สร้าง: เจ้าของคำขอเอง, admin, approver
+      allow create: if isCreatingOwnRequest() || isAdmin() || isApprover();
 
-      // แก้ไข: admin แก้ได้ทุก request | เจ้าของแก้ได้เฉพาะของตัวเอง
-      allow update: if isAuthenticated()
-                    && (isAdmin() || isOwnerOf(resource));
+      // แก้ไข: admin, approver, หรือเจ้าของคำขอ
+      allow update: if isAppUser() && (isAdmin() || isApprover() || isRequestOwner());
 
-      // ลบ: admin เท่านั้น
-      allow delete: if isAdmin();
+      // ลบ: admin หรือเจ้าของคำขอ
+      allow delete: if isAppUser() && (isAdmin() || isRequestOwner());
     }
 
-    // ------------------------------------------------------------------
-    // users — ข้อมูลผู้ใช้
-    // ------------------------------------------------------------------
+    // ----------------------------------------------------------------
+    // users
+    // ----------------------------------------------------------------
     match /users/{userId} {
-      // อ่าน: admin เห็นทุกคน | ตัวเองอ่านได้เฉพาะของตัวเอง
-      allow read: if isAuthenticated()
-                  && (isAdmin() || request.auth.uid == userId);
+      // อ่านได้สำหรับผู้ใช้ในระบบทุกคน
+      // รองรับ query หาผู้ใช้ด้วย username / รายชื่อ approver / หน้า admin users
+      allow read: if isAppUser();
 
-      // สร้างบัญชีใหม่: admin สร้างได้ทุกคน | ตัวเองสร้าง doc ตัวเองได้ (auto-provision ตอน login)
-      // role ที่แท้จริงมาจาก GAS/Sheets ซึ่งเป็น authoritative source อยู่แล้ว
-      allow create: if isAdmin() || request.auth.uid == userId;
+      // สร้าง: admin หรือสร้าง doc ของตัวเองตอน login
+      allow create: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
 
-      // แก้ไข: admin แก้ได้ทุกคน | ตัวเองแก้ได้เฉพาะ field ที่อนุญาต
-      //   (ป้องกันไม่ให้ user แก้ role ตัวเองเป็น admin)
+      // แก้ไข:
+      // - admin แก้ได้ทุก field
+      // - เจ้าของ doc แก้ได้ แต่ห้ามเปลี่ยน role เอง
       allow update: if isAuthenticated() && (
         isAdmin()
         || (
@@ -116,25 +118,18 @@ service cloud.firestore {
         )
       );
 
-      // ลบ: admin เท่านั้น
       allow delete: if isAdmin();
     }
 
-    // ------------------------------------------------------------------
-    // approvalLinks — Token ลงนามแบบไม่ต้อง Login
-    //
-    // ✅ อ่านได้ทุกคน (tokenSign.js ต้องใช้โดยไม่ login)
-    // ✅ สร้าง: admin หรือ approver
-    // ✅ อัปเดต: อนุญาตเฉพาะการเปลี่ยน used=true (ปิด token หลังใช้)
-    //           ห้ามแก้ไข field อื่น
-    // ✅ ลบ: admin เท่านั้น
-    // ------------------------------------------------------------------
+    // ----------------------------------------------------------------
+    // approvalLinks
+    // ----------------------------------------------------------------
     match /approvalLinks/{linkId} {
       allow read: if true;
 
-      allow create: if isAuthenticated() && (isAdmin() || isApprover());
+      allow create: if isAppUser() && (isAdmin() || isApprover());
 
-      // อนุญาตให้ mark used=true เท่านั้น ห้ามแก้ field อื่น
+      // ใช้ mark token เป็น used=true เท่านั้น
       allow update: if
         request.resource.data.used == true
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used'])
@@ -143,48 +138,45 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // ------------------------------------------------------------------
-    // counters — นับเลขเอกสาร (atomic counter)
-    // ------------------------------------------------------------------
+    // ----------------------------------------------------------------
+    // counters
+    // ----------------------------------------------------------------
     match /counters/{counterId} {
-      // ต้อง login จึงจะสร้าง/อ่าน/แก้ counter ได้
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read, write: if isAppUser();
     }
 
-    // ------------------------------------------------------------------
-    // systemConfig — ค่าตั้งระบบ (ชื่อผู้ลงนาม ฯลฯ)
-    // ------------------------------------------------------------------
+    // ----------------------------------------------------------------
+    // systemConfig
+    // ----------------------------------------------------------------
     match /systemConfig/{docId} {
-      allow read: if isAuthenticated();
+      allow read: if isAppUser();
       allow write: if isAdmin();
     }
 
-    // ------------------------------------------------------------------
-    // settings — ประกาศ / ข่าวสาร
-    // ------------------------------------------------------------------
+    // ----------------------------------------------------------------
+    // settings
+    // ----------------------------------------------------------------
     match /settings/{docId} {
-      // ประกาศอ่านได้แม้ยังไม่ login (แสดงบนหน้า login)
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // ------------------------------------------------------------------
-    // memos — บันทึกข้อความ
-    // ------------------------------------------------------------------
+    // ----------------------------------------------------------------
+    // memos
+    // ----------------------------------------------------------------
     match /memos/{memoId} {
-      allow read: if isAuthenticated()
-                  && (isAdmin() || isApprover() || isOwnerOf(resource));
-      allow create: if isAuthenticated()
-                    && request.resource.data.username == myUsername();
-      allow update: if isAuthenticated()
-                    && (isAdmin() || isOwnerOf(resource));
-      allow delete: if isAdmin();
+      allow read: if isAppUser();
+
+      allow create: if isCreatingOwnMemo() || isAdmin() || isApprover();
+
+      allow update: if isAppUser() && (isAdmin() || isApprover() || isMemoOwner());
+
+      allow delete: if isAppUser() && (isAdmin() || isMemoOwner());
     }
 
-    // ------------------------------------------------------------------
-    // ปิดกั้นทุก Collection ที่ไม่ได้ระบุ (default deny)
-    // ------------------------------------------------------------------
+    // ----------------------------------------------------------------
+    // default deny
+    // ----------------------------------------------------------------
     match /{document=**} {
       allow read, write: if false;
     }

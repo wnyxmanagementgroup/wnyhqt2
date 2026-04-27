@@ -19,18 +19,52 @@ const PAGE_TITLES = {
     'admin-approval-links-page':  'จัดการลิงก์ลงนาม',
 };
 
+const MOBILE_SIDEBAR_BREAKPOINT = 1024;
+
+function isMobileSidebarViewport() {
+    return window.innerWidth <= MOBILE_SIDEBAR_BREAKPOINT;
+}
+
+function syncSidebarLayoutState() {
+    const sidebar = document.getElementById('sidebar');
+    const app = document.getElementById('main-app');
+    if (!sidebar || !app) return;
+
+    const isCollapsed = sidebar.classList.contains('collapsed');
+    app.classList.toggle('sidebar-open-mobile', isMobileSidebarViewport() && !isCollapsed);
+}
+
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
     sidebar.classList.toggle('collapsed');
-    localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
+    if (!isMobileSidebarViewport()) {
+        localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
+    }
+    syncSidebarLayoutState();
 }
 
 // Restore sidebar state from localStorage
 document.addEventListener('DOMContentLoaded', function() {
-    if (localStorage.getItem('sidebar-collapsed') === 'true') {
-        document.getElementById('sidebar')?.classList.add('collapsed');
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    if (isMobileSidebarViewport()) {
+        sidebar.classList.add('collapsed');
+    } else if (localStorage.getItem('sidebar-collapsed') === 'true') {
+        sidebar.classList.add('collapsed');
     }
+    syncSidebarLayoutState();
+});
+
+window.addEventListener('resize', () => {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    if (isMobileSidebarViewport()) {
+        sidebar.classList.add('collapsed');
+    }
+    syncSidebarLayoutState();
 });
 
 async function switchPage(targetPageId) {
@@ -112,6 +146,14 @@ async function switchPage(targetPageId) {
     if (targetPageId === 'command-generation-page') {
         const tab = document.getElementById('admin-view-dashboard-tab');
         if (tab) tab.click();
+    }
+
+    if (isMobileSidebarViewport()) {
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar && !sidebar.classList.contains('collapsed')) {
+            sidebar.classList.add('collapsed');
+            syncSidebarLayoutState();
+        }
     }
 }
 
@@ -310,6 +352,21 @@ function openPendingMemoList() {
         </div>`;
     modal.style.display = 'flex';
 }
+
+function filterUserRequestsForDashboard(requests, searchTerm = '') {
+    if (!Array.isArray(requests)) return [];
+
+    const term = String(searchTerm || '').trim().toLowerCase();
+    if (!term) return requests;
+
+    return requests.filter(req =>
+        (req.id && req.id.toLowerCase().includes(term)) ||
+        (req.requestId && req.requestId.toLowerCase().includes(term)) ||
+        (req.purpose && req.purpose.toLowerCase().includes(term)) ||
+        (req.location && req.location.toLowerCase().includes(term))
+    );
+}
+
 function setupEventListeners() {
     if (typeof setupFormConditions === 'function') setupFormConditions();
     
@@ -426,6 +483,20 @@ document.getElementById('edit-user-cancel')?.addEventListener('click', () => { d
         if (navButton && navButton.dataset.target) { await switchPage(navButton.dataset.target); }
     });
 
+    document.addEventListener('click', (e) => {
+        if (!isMobileSidebarViewport()) return;
+
+        const sidebar = document.getElementById('sidebar');
+        if (!sidebar || sidebar.classList.contains('collapsed')) return;
+
+        const clickedInsideSidebar = e.target.closest('#sidebar');
+        const clickedHamburger = e.target.closest('.hamburger-btn');
+        if (!clickedInsideSidebar && !clickedHamburger) {
+            sidebar.classList.add('collapsed');
+            syncSidebarLayoutState();
+        }
+    });
+
     // --- Forms & Inputs ---
     setupVehicleOptions();
     
@@ -498,11 +569,16 @@ document.querySelectorAll('input[name="modal_memo_type"]').forEach(radio => radi
         const headNameInput = document.getElementById('form-head-name');
         if(headNameInput) headNameInput.value = specialPositionMap[selectedPosition] || '';
     });
-    
+
     const searchInput = document.getElementById('search-requests');
     if (searchInput) {
-        searchInput.addEventListener('input', (e) => renderRequestsList(allRequestsCache, userMemosCache, e.target.value));
+        searchInput.addEventListener('input', (e) => {
+            const source = Array.isArray(window.userRequestsCache) ? window.userRequestsCache : [];
+            renderUserRequests(filterUserRequestsForDashboard(source, e.target.value));
+        });
     }
+
+    document.getElementById('user-requests-list')?.addEventListener('click', handleRequestAction);
 
     // --- Admin User Mgmt ---
     document.getElementById('add-user-button')?.addEventListener('click', openAddUserModal);
@@ -698,9 +774,11 @@ function handleExcelImport(e) {
 }
 
 function downloadAttendeeTemplate() {
-    const ws = XLSX.utils.aoa_to_sheet([['ชื่อ-นามสกุล', 'ตำแหน่ง'],['ตัวอย่าง ผู้ใช้', 'ครู']]);
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Template');
-    XLSX.writeFile(wb, 'attendee_template.xlsx');
+    withDownloadIndicator(async () => {
+        const ws = XLSX.utils.aoa_to_sheet([['ชื่อ-นามสกุล', 'ตำแหน่ง'],['ตัวอย่าง ผู้ใช้', 'ครู']]);
+        const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Template');
+        XLSX.writeFile(wb, 'attendee_template.xlsx');
+    }, 'กำลังสร้างไฟล์แม่แบบผู้ร่วมเดินทาง...');
 }
 
 function enhanceEditFunctionSafety() {
@@ -1016,161 +1094,6 @@ async function mergeFilesToSinglePDF(files) {
     return new Blob([pdfBytes], { type: 'application/pdf' });
 }
 
-// 2. ฟังก์ชันหลักสำหรับส่งบันทึกจาก Modal (รวมไฟล์แล้วอัปโหลด)
-// ==========================================
-// 2. ฟังก์ชันหลักสำหรับส่งบันทึกจาก Modal (ปรับปรุง: Admin Bypass File)
-// ==========================================
-async function handleMemoSubmitFromModal(e) {
-    e.preventDefault();
-    const user = getCurrentUser();
-    if (!user) return;
-
-    // ตรวจสอบสิทธิ์ Admin
-    const isAdmin = user.role === 'admin';
-
-    const requestId = document.getElementById('memo-modal-request-id').value;
-    
-    // ตรวจสอบว่ามีการเลือก Radio Button หรือไม่
-    const memoTypeInput = document.querySelector('input[name="modal_memo_type"]:checked');
-    const memoType = memoTypeInput ? memoTypeInput.value : 'non_reimburse';
-
-    // กำหนด docStatus ว่าส่งต่อให้ใคร (เบิก → admin, อื่น → ตาม select)
-    const forwardToStatus = memoType === 'reimburse'
-        ? 'waiting_admin_review'
-        : (document.getElementById('modal-forward-to')?.value || 'waiting_admin_review');
-
-    toggleLoader('send-memo-submit-button', true);
-
-    try {
-        if (typeof ensureFirebaseAuth === 'function') await ensureFirebaseAuth();
-        let finalFileUrlForAdmin = "";
-
-        if (memoType === 'non_reimburse') {
-            // --- ดึงไฟล์จาก Input ---
-            const fileSigned   = document.getElementById('file-signed-memo')?.files[0];
-            const fileExchange = document.getElementById('file-exchange')?.files[0];
-            const fileRef      = document.getElementById('file-ref-doc')?.files[0];
-            const fileOther    = document.getElementById('file-other')?.files[0];
-
-            // ★ เรียงตามลำดับที่ผู้ใช้อัพโหลดจริง (ไม่ใช่ลำดับช่อง)
-            const filesToMerge = [
-                { id: 'file-signed-memo', file: fileSigned   },
-                { id: 'file-exchange',    file: fileExchange },
-                { id: 'file-ref-doc',     file: fileRef      },
-                { id: 'file-other',       file: fileOther    },
-            ]
-            .filter(d => d.file)
-            .sort((a, b) => (window._memoUploadOrder[a.id] || 0) - (window._memoUploadOrder[b.id] || 0))
-            .map(d => d.file);
-
-            // --- 1. ตรวจสอบเงื่อนไข (Validation) ---
-            // ถ้าไม่ใช่ Admin ต้องแนบไฟล์ครบ
-            // ถ้าเป็น Admin แต่ไม่มีไฟล์เลย ก็ให้ผ่านได้ (Bypass)
-            // ถ้าเป็น Admin และมีการแนบไฟล์มาบางส่วน ก็ให้รวมไฟล์ตามปกติ
-            
-            if (!isAdmin) {
-                // ใบแลกคาบสอน (fileExchange) ไม่บังคับ — ลบออกจาก required ตาม feature request
-                if (!fileSigned || !fileRef) {
-                    throw new Error("กรุณาแนบไฟล์บังคับให้ครบถ้วน:\n1. บันทึกข้อความที่ลงนามแล้ว\n2. หนังสือต้นเรื่อง");
-                }
-            }
-
-            // --- 2. รวมไฟล์และอัปโหลด (ถ้ามีไฟล์) ---
-            if (filesToMerge.length > 0) {
-                // เปลี่ยนข้อความปุ่ม
-                const btn = document.getElementById('send-memo-submit-button');
-                const originalBtnText = btn.innerHTML;
-                btn.innerHTML = '<div class="loader"></div> กำลังรวมไฟล์ PDF...';
-
-                // เรียกฟังก์ชันรวมไฟล์
-                const mergedPdfBlob = await mergeFilesToSinglePDF(filesToMerge);
-
-                // --- อัปโหลดไฟล์ขึ้น Firebase Storage ---
-                btn.innerHTML = '<div class="loader"></div> กำลังอัปโหลด...';
-                finalFileUrlForAdmin = await uploadPdfToFirebaseStorage(
-                    mergedPdfBlob, user.username,
-                    `Complete_Memo_${requestId.replace(/[\/\\:\.]/g, '-')}.pdf`
-                );
-                
-                // คืนค่าปุ่ม
-                btn.innerHTML = originalBtnText;
-
-            } else if (isAdmin) {
-                console.log("🛡️ Admin Bypass: ส่งบันทึกโดยไม่มีไฟล์แนบ");
-                // กรณี Admin ไม่แนบไฟล์ ระบบจะข้ามขั้นตอน Merge/Upload
-                // finalFileUrlForAdmin จะเป็นค่าว่าง ""
-            }
-
-            // --- 3. บันทึกลิงก์ลง Database (ถ้ามี URL) ---
-            if (finalFileUrlForAdmin) {
-                await apiCall('POST', 'updateRequest', {
-                    requestId: requestId,
-                    completedMemoUrl: finalFileUrlForAdmin 
-                });
-
-                if (typeof db !== 'undefined') {
-                    const docId = requestId.replace(/[\/\\:\.]/g, '-');
-                    await db.collection('requests').doc(docId).set({
-                        completedMemoUrl: finalFileUrlForAdmin,
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-                    }, { merge: true });
-                }
-            }
-        } 
-
-        // --- ส่งสถานะ "Submitted" ไปยังระบบ ---
-        const result = await apiCall('POST', 'uploadMemo', { 
-            refNumber: requestId, 
-            file: null, 
-            fileUrl: finalFileUrlForAdmin, // ถ้า Admin ไม่แนบ ค่านี้จะเป็น "" ซึ่ง backend ควรรับได้
-            username: user.username, 
-            memoType: memoType,
-            isAdminBypass: isAdmin // (Optional) ส่ง Flag บอก Backend ว่าเป็นการ Bypass
-        });
-
-        if (result.status === 'success') {
-            // ★ อัปเดต Firestore ด้วย status + docStatus เพื่อให้ badge แสดงถูกต้อง
-            if (typeof db !== 'undefined') {
-                try {
-                    const docId = requestId.replace(/[\/\\:\.]/g, '-');
-                    const firestoreStatusUpdate = {
-                        status:      'Submitted',
-                        docStatus:   forwardToStatus,
-                        wasRejected: false,          // ★ ล้างสถานะตีกลับเมื่อส่งใหม่สำเร็จ
-                        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-                    };
-                    if (finalFileUrlForAdmin) firestoreStatusUpdate.completedMemoUrl = finalFileUrlForAdmin;
-                    await db.collection('requests').doc(docId).set(firestoreStatusUpdate, { merge: true });
-                } catch (fbErr) { console.warn('⚠️ Firebase status update warn:', fbErr); }
-            }
-
-            showAlert('สำเร็จ', memoType === 'reimburse'
-                ? 'ส่งบันทึกข้อความเรียบร้อยแล้ว (กรุณานำเอกสารฉบับจริงส่งที่งานบุคคล)'
-                : (isAdmin && !finalFileUrlForAdmin
-                    ? 'อัปเดตสถานะเรียบร้อยแล้ว (Admin Bypass)'
-                    : 'รวมไฟล์และส่งบันทึกข้อความเรียบร้อยแล้ว'));
-
-            document.getElementById('send-memo-modal').style.display = 'none';
-            document.getElementById('send-memo-form').reset();
-
-            // รีเฟรชหน้าจอ (forceRefresh เพื่อเคลียร์ cache หลังส่งสำเร็จ)
-            if (!document.getElementById('send-memo-page').classList.contains('hidden')) {
-                if (typeof fetchPendingMemos === 'function') await fetchPendingMemos();
-            }
-            if (typeof fetchUserRequests === 'function') await fetchUserRequests(true);
-        } else { 
-            throw new Error(result.message); 
-        }
-
-    } catch (error) {
-        console.error(error);
-        showAlert('ผิดพลาด', error.message);
-        const btn = document.getElementById('send-memo-submit-button');
-        if(btn) btn.innerHTML = 'ยืนยันการส่งบันทึก';
-    } finally {
-        toggleLoader('send-memo-submit-button', false);
-    }
-}
 // ในไฟล์ js/main.js
 
 function updateSidebarForRole(user) {
@@ -1226,6 +1149,21 @@ function updateSidebarForRole(user) {
 // cache เก็บข้อมูลเอกสารรอลงนาม (ใช้ใน openApprovalDocument)
 window._approvalDocs = {};
 
+async function getApprovalDocsFallback(targetStatus) {
+    const result = await apiCall('GET', 'getAllRequests');
+    const requests = (result.status === 'success') ? (result.data || []) : [];
+
+    return requests
+        .filter(req => (req.docStatus || '') === targetStatus)
+        .map(req => {
+            const safeDocId = (req.id || req.requestId || '').replace(/[\/\\:\.]/g, '-');
+            return {
+                docId: safeDocId,
+                ...req
+            };
+        });
+}
+
 // 1. ฟังก์ชันโหลดรายการเอกสารที่รอเซ็น
 async function loadPendingApprovals() {
     const user = getCurrentUser();
@@ -1255,13 +1193,42 @@ async function loadPendingApprovals() {
             return;
         }
 
-        // ใช้ where อย่างเดียว (ไม่ orderBy) เพื่อไม่ต้องการ composite index
-        // และไม่ตัดเอกสารที่ไม่มี timestamp field ออกจากผลลัพธ์
-        const snapshot = await db.collection('requests')
-            .where('docStatus', '==', targetStatus)
-            .get();
+        let docs = [];
 
-        if (snapshot.empty) {
+        if (user.role === 'admin') {
+            docs = await getApprovalDocsFallback(targetStatus);
+            window._approvalDocs = {};
+            docs.forEach(doc => {
+                if (doc.docId) window._approvalDocs[doc.docId] = doc;
+            });
+        } else {
+            try {
+                // ใช้ where อย่างเดียว (ไม่ orderBy) เพื่อไม่ต้องการ composite index
+                // และไม่ตัดเอกสารที่ไม่มี timestamp field ออกจากผลลัพธ์
+                const snapshot = await db.collection('requests')
+                    .where('docStatus', '==', targetStatus)
+                    .get();
+
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    docs.push({ docId: doc.id, ...data });
+                    window._approvalDocs[doc.id] = data;
+                });
+            } catch (firestoreError) {
+                const message = String(firestoreError?.message || firestoreError || '');
+                const isPermissionError = /Missing or insufficient permissions/i.test(message);
+                if (!isPermissionError) throw firestoreError;
+
+                console.warn('⚠️ Firestore approval query blocked, fallback to GAS:', message);
+                docs = await getApprovalDocsFallback(targetStatus);
+                window._approvalDocs = {};
+                docs.forEach(doc => {
+                    if (doc.docId) window._approvalDocs[doc.docId] = doc;
+                });
+            }
+        }
+
+        if (docs.length === 0) {
             container.innerHTML = `
                 <div class="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
                     <span class="text-4xl">🎉</span>
@@ -1273,16 +1240,11 @@ async function loadPendingApprovals() {
         }
 
         const badge = document.getElementById('approval-badge');
-        badge.innerText = snapshot.size;
-        badge.classList.remove('hidden');
+        if (badge) {
+            badge.innerText = docs.length;
+            badge.classList.remove('hidden');
+        }
 
-        // เก็บข้อมูลไว้ใน cache
-        window._approvalDocs = {};
-        snapshot.forEach(doc => { window._approvalDocs[doc.id] = doc.data(); });
-
-        // รวมข้อมูลเป็น array พร้อม docId แล้วเรียงจากล่าสุด → เก่าสุด
-        const docs = [];
-        snapshot.forEach(doc => docs.push({ docId: doc.id, ...doc.data() }));
         // sort ใน JS: ใช้ timestamp หรือ lastUpdated ที่มี fallback เป็น 0
         docs.sort((a, b) => {
             const tA = (a.timestamp?.toMillis?.() || a.lastUpdated?.toMillis?.() || 0);
@@ -1360,6 +1322,7 @@ function _buildSigningProgress(req) {
     return `<div class="flex flex-wrap gap-1 mt-1.5">${pills.join('')}</div>`;
 }
 
+
 // ฟังก์ชันสร้าง HTML ตารางเอกสารรอลงนาม
 function _renderApprovalTable(docs, user, title, color) {
     // ถ้าไม่มีเอกสารในหมวดนี้ (สำหรับ saraban ที่แยก 2 ตาราง)
@@ -1377,7 +1340,7 @@ function _renderApprovalTable(docs, user, title, color) {
 
     let rows = '';
     docs.forEach((req, idx) => {
-        const pdfUrl  = req.pdfUrl || req.memoPdfUrl || req.currentPdfUrl || req.commandPdfUrl || '';
+        const pdfUrl  = req.completedMemoUrl || req.pdfUrl || req.memoPdfUrl || req.currentPdfUrl || req.commandPdfUrl || '';
         const dateStr = req.timestamp ? formatDisplayDate(req.timestamp) : '-';
         const isCmd   = (req.docType === 'command') || !!req.commandPdfUrl;
         const docId   = req.docId;
@@ -1488,10 +1451,10 @@ function _renderApprovalTable(docs, user, title, color) {
                 <td class="px-4 py-3 text-gray-500 text-sm whitespace-nowrap">${dateStr}</td>
                 <td class="px-4 py-3">${typeBadge}</td>
                 <td class="px-4 py-3 font-medium text-gray-800 text-sm max-w-xs">
-                    <div class="line-clamp-2">${req.purpose || 'ไม่มีหัวข้อ'}</div>
+                    <div class="line-clamp-2">${escapeHtml(req.purpose || 'ไม่มีหัวข้อ')}</div>
                     ${user.role === 'admin' ? _buildSigningProgress(req) : ''}
                 </td>
-                <td class="px-4 py-3 text-gray-500 text-sm whitespace-nowrap">${req.requesterName || '-'}</td>
+                <td class="px-4 py-3 text-gray-500 text-sm whitespace-nowrap">${escapeHtml(req.requesterName || '-')}</td>
                 <td class="px-4 py-3 text-center">${statusBadge}</td>
                 <td class="px-4 py-3 text-center">${actionCell}</td>
             </tr>`;
@@ -1554,14 +1517,17 @@ function getTargetStatusForUser(role) {
 // 3. ฟังก์ชันเมื่อกดปุ่ม "เปิดอ่านและลงนาม" (อ่านข้อมูลจาก cache _approvalDocs)
 function openApprovalDocument(docId) {
     const data = window._approvalDocs?.[docId] || {};
-    const pdfUrl = data.pdfUrl || data.memoPdfUrl || data.currentPdfUrl || '';
+    // ใช้ไฟล์รวมทุกเอกสาร (completedMemoUrl) ก่อน เพื่อให้เห็นทั้งบันทึกและไฟล์แนบในไฟล์เดียว
+    const pdfUrl = data.completedMemoUrl || data.pdfUrl || data.memoPdfUrl || data.currentPdfUrl || '';
     const currentDocStatus = data.docStatus || null;
+    // ใช้ original ID (มี /) เพื่อให้ GAS หาเอกสารเจอ — docId คือ safeId (มี -)
+    const origId = data.id || data.requestId || docId;
 
     if (!pdfUrl) {
         alert("ไม่พบไฟล์ PDF ในระบบ กรุณาติดต่อแอดมิน");
         return;
     }
-    openSignatureSystem(pdfUrl, docId, "✍️ ลงนามเอกสาร", currentDocStatus);
+    openSignatureSystem(pdfUrl, origId, "✍️ ลงนามเอกสาร", currentDocStatus);
 }
 
 // 4. แอดมินตรวจสอบแล้ว → ส่งต่อให้งานสารบรรณ (ไม่ต้องเซ็น)
@@ -2602,7 +2568,6 @@ window.confirmAdminRoute = async function() {
         if (typeof db !== 'undefined') {
             await db.collection('requests').doc(safeId).set({
                 docStatus:       targetStatus,
-                status:          targetStatus,
                 adminRoutedAt:   firebase.firestore.FieldValue.serverTimestamp(),
                 adminRoutedBy:   user?.name || user?.username || 'admin',
                 lastUpdated:     firebase.firestore.FieldValue.serverTimestamp(),

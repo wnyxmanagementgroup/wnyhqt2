@@ -1,4 +1,5 @@
 // --- CACHE SYSTEM ---
+window.MAX_SIGNATURE_PLACEMENTS = 10;
 window.userRequestsCache = null;      // เก็บข้อมูลคำขอของ User
 window.userRequestsCacheTime = 0;     // เก็บ Timestamp ล่าสุดที่ดึงข้อมูล
 window.userRequestsCacheYear = null;  // เก็บปีของข้อมูลที่ Cache ไว้
@@ -160,6 +161,121 @@ function toggleLoader(buttonId, show) {
         button.disabled = false;
     }
 }
+
+let _downloadIndicatorActiveCount = 0;
+let _downloadIndicatorHideTimer = null;
+
+function ensureDownloadIndicator() {
+    let indicator = document.getElementById('download-indicator');
+    if (indicator) return indicator;
+
+    indicator = document.createElement('div');
+    indicator.id = 'download-indicator';
+    indicator.className = 'download-indicator hidden';
+    indicator.innerHTML = `
+        <div class="download-indicator-card">
+            <div class="loader"></div>
+            <div class="download-indicator-text-wrap">
+                <div class="download-indicator-title">กำลังดาวน์โหลดข้อมูล</div>
+                <div id="download-indicator-message" class="download-indicator-message">กำลังเตรียมไฟล์ กรุณารอสักครู่...</div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(indicator);
+    return indicator;
+}
+
+function showDownloadIndicator(message = 'กำลังเตรียมไฟล์ กรุณารอสักครู่...') {
+    const indicator = ensureDownloadIndicator();
+    const messageEl = document.getElementById('download-indicator-message');
+    if (messageEl) messageEl.textContent = message;
+
+    _downloadIndicatorActiveCount += 1;
+    if (_downloadIndicatorHideTimer) {
+        clearTimeout(_downloadIndicatorHideTimer);
+        _downloadIndicatorHideTimer = null;
+    }
+    indicator.classList.remove('hidden');
+}
+
+function hideDownloadIndicator(force = false) {
+    const indicator = document.getElementById('download-indicator');
+    if (!indicator) return;
+
+    if (force) {
+        _downloadIndicatorActiveCount = 0;
+    } else {
+        _downloadIndicatorActiveCount = Math.max(0, _downloadIndicatorActiveCount - 1);
+    }
+
+    if (_downloadIndicatorActiveCount === 0) {
+        indicator.classList.add('hidden');
+    }
+}
+
+async function withDownloadIndicator(task, message = 'กำลังเตรียมไฟล์ กรุณารอสักครู่...', minDurationMs = 1200) {
+    const startedAt = Date.now();
+    showDownloadIndicator(message);
+    try {
+        return await task();
+    } finally {
+        const elapsed = Date.now() - startedAt;
+        const waitMore = Math.max(0, minDurationMs - elapsed);
+        if (waitMore > 0) {
+            await new Promise(resolve => setTimeout(resolve, waitMore));
+        }
+        hideDownloadIndicator();
+    }
+}
+
+function scheduleDownloadIndicatorHide(delayMs = 2200) {
+    if (_downloadIndicatorHideTimer) clearTimeout(_downloadIndicatorHideTimer);
+    _downloadIndicatorHideTimer = setTimeout(() => {
+        hideDownloadIndicator(true);
+        _downloadIndicatorHideTimer = null;
+    }, delayMs);
+}
+
+function openUrlWithDownloadIndicator(url, message = 'กำลังเปิดไฟล์ กรุณารอสักครู่...') {
+    if (!url) return;
+    showDownloadIndicator(message);
+    window.open(url, '_blank');
+    scheduleDownloadIndicatorHide();
+}
+
+function triggerBrowserDownload(url, filename, message = 'กำลังดาวน์โหลดไฟล์ กรุณารอสักครู่...') {
+    if (!url) return;
+    showDownloadIndicator(message);
+    const a = document.createElement('a');
+    a.href = url;
+    if (filename) a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    scheduleDownloadIndicatorHide();
+}
+
+document.addEventListener('click', (event) => {
+    const link = event.target.closest('a[href]');
+    if (!link || link.dataset.noDownloadIndicator === 'true') return;
+    if (event.defaultPrevented) return;
+
+    const href = (link.getAttribute('href') || '').trim();
+    if (!href || href === '#' || href.startsWith('javascript:')) return;
+
+    const looksLikeFileLink =
+        link.hasAttribute('download') ||
+        link.target === '_blank' ||
+        /\.(pdf|docx|doc|xlsx|xls|csv|zip)(\?|#|$)/i.test(href) ||
+        href.startsWith('blob:') ||
+        href.includes('drive.google.com') ||
+        href.includes('/uc?export=download');
+
+    if (!looksLikeFileLink) return;
+
+    showDownloadIndicator(link.dataset.downloadMessage || 'กำลังเปิดไฟล์/ดาวน์โหลดข้อมูล กรุณารอสักครู่...');
+    scheduleDownloadIndicatorHide();
+});
 
 // ─── Saving Overlay ────────────────────────────────────────────────────────
 let _isSaving = false;

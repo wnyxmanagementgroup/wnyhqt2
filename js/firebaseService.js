@@ -2,8 +2,7 @@
  * firebaseService.js
  * =====================================================================
  * Firestore เป็นฐานข้อมูลหลัก — GAS/Sheets เป็น async backup เท่านั้น
- * Google Drive (ผ่าน GAS uploadGeneratedFile) เป็นที่เก็บไฟล์หลัก
- * Firebase Storage สำหรับเก็บไฟล์ชั่วคราวระหว่างกระบวนการ
+ * Google Drive (ผ่าน GAS uploadGeneratedFile) เป็นที่เก็บไฟล์หลักของระบบ
  * =====================================================================
  */
 
@@ -121,36 +120,18 @@ async function uploadPdfToStorage(pdfBlob, username, filename) {
 }
 
 // -----------------------------------------------------------------------
-// 3.5 FIREBASE STORAGE FUNCTIONS — สำหรับเก็บไฟล์ชั่วคราวระหว่างกระบวนการ
+// 3.5 PDF UPLOAD COMPATIBILITY LAYER
 // -----------------------------------------------------------------------
 
 /**
- * อัปโหลดไฟล์ PDF ไปยัง Firebase Storage (ไม่ใช่ Google Drive)
- * สำหรับใช้งานในกระบวนการส่งบันทึก (Firebase-first)
+ * เดิมใช้ชื่อฟังก์ชันนี้สำหรับอัปโหลดไป Firebase Storage
+ * ตอนนี้ย้ายให้ใช้ Google Drive เป็นปลายทางหลักแทน
+ * เพื่อให้จุดเรียกเดิมทั่วระบบยังทำงานได้โดยไม่ต้อง refactor ครั้งใหญ่
  */
 async function uploadPdfToFirebaseStorage(pdfBlob, username, filename) {
-    if (!storage) {
-        // พยายาม initialize ถ้ายังไม่มี
-        try {
-            storage = firebase.storage();
-        } catch(e) {
-            throw new Error('Firebase Storage not initialized');
-        }
-    }
-    if (!storage) throw new Error('Firebase Storage not initialized');
-
-    const safeUsername = (username || 'unknown').replace(/[^a-zA-Z0-9ก-๙_-]/g, '_');
-    const safeFilename = filename || `${safeUsername}_${Date.now()}.pdf`;
-    const path = `memos/${safeUsername}/${safeFilename}`;
-
-    const storageRef = storage.ref(path);
-    const snapshot = await storageRef.put(pdfBlob, {
-        contentType: 'application/pdf'
-    });
-
-    const downloadUrl = await snapshot.ref.getDownloadURL();
-    console.log('✅ Uploaded to Firebase Storage:', downloadUrl);
-    return downloadUrl;
+    const driveUrl = await uploadPdfToStorage(pdfBlob, username, filename);
+    console.log('✅ Uploaded PDF to Google Drive:', driveUrl);
+    return driveUrl;
 }
 
 /**
@@ -316,7 +297,7 @@ async function generateCommandHybrid(data) {
             }
             const commandData = {
                 ...data,
-                doctype: 'command',
+                docType: 'command',
                 templateType: templateName.replace('template_command_', '').replace('.docx', ''),
                 btnId: null
             };
@@ -401,11 +382,45 @@ async function backupFirestoreToSheets(yearBE) {
         return data;
     });
 
-    console.log(`📤 Sending ${requests.length} records to GAS...`);
+    const requestIds = new Set(
+        requests.map(req => String(req.id || req.requestId || '').trim()).filter(Boolean)
+    );
+    const safeRequestIds = new Set(
+        Array.from(requestIds).map(id => id.replace(/[\/\\:\.]/g, '-'))
+    );
+
+    let memos = [];
+    try {
+        const memoSnapshot = await db.collection('memos').get();
+        memos = memoSnapshot.docs
+            .map(doc => {
+                const data = doc.data() || {};
+                if (data.timestamp && data.timestamp.toDate) {
+                    data.timestamp = data.timestamp.toDate().toISOString();
+                }
+                if (data.lastUpdated && data.lastUpdated.toDate) {
+                    data.lastUpdated = data.lastUpdated.toDate().toISOString();
+                }
+                return {
+                    ...data,
+                    _docId: doc.id
+                };
+            })
+            .filter(memo => {
+                const refNumber = String(memo.refNumber || memo.id || '').trim();
+                if (!refNumber) return safeRequestIds.has(String(memo._docId || '').trim());
+                return requestIds.has(refNumber);
+            });
+    } catch (error) {
+        console.warn('⚠️ Memo backup skipped:', error.message);
+    }
+
+    console.log(`📤 Sending ${requests.length} requests and ${memos.length} memos to GAS...`);
 
     // ส่ง batch ไปยัง GAS
     const result = await apiCall('POST', 'batchSyncFromFirestore', {
         requests,
+        memos,
         year: targetYear,
         syncedAt: new Date().toISOString()
     });

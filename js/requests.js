@@ -25,8 +25,22 @@ const THAI_PROVINCES = [
     "อุตรดิตถ์", "อุทัยธานี", "อุบลราชธานี"
 ];
 
-function initProvinceDropdown() {
-    const select = document.getElementById('form-province');
+function stripProvincePrefix(provinceValue) {
+    const rawValue = String(provinceValue || '').trim();
+    if (!rawValue) return '';
+    if (rawValue === 'กรุงเทพมหานคร') return rawValue;
+    return rawValue.replace(/^จังหวัด\s*/u, '').trim();
+}
+
+function formatProvinceLabel(provinceValue) {
+    const plainProvince = stripProvincePrefix(provinceValue);
+    if (!plainProvince) return '';
+    if (plainProvince === 'กรุงเทพมหานคร') return plainProvince;
+    return `จังหวัด${plainProvince}`;
+}
+
+function initProvinceDropdown(selectId = 'form-province') {
+    const select = document.getElementById(selectId);
     if (!select) return;
 
     select.innerHTML = ''; 
@@ -34,7 +48,7 @@ function initProvinceDropdown() {
     // ค่าเริ่มต้น
     const defaultOption = document.createElement('option');
     defaultOption.value = 'สระแก้ว';
-    defaultOption.text = 'สระแก้ว';
+    defaultOption.text = formatProvinceLabel('สระแก้ว');
     defaultOption.selected = true;
     select.appendChild(defaultOption);
 
@@ -43,7 +57,7 @@ function initProvinceDropdown() {
         if (province !== 'สระแก้ว') {
             const option = document.createElement('option');
             option.value = province;
-            option.text = province;
+            option.text = formatProvinceLabel(province);
             select.appendChild(option);
         }
     });
@@ -54,10 +68,63 @@ function initProvinceDropdown() {
     select.appendChild(otherOption);
 }
 
+function setupProvinceField(selectId, otherInputId, defaultProvince = 'สระแก้ว') {
+    const provinceSelect = document.getElementById(selectId);
+    const provinceOther = document.getElementById(otherInputId);
+    if (!provinceSelect) return;
+
+    initProvinceDropdown(selectId);
+
+    const updateProvinceOtherVisibility = () => {
+        if (!provinceOther) return;
+        if (provinceSelect.value === 'other') {
+            provinceOther.classList.remove('hidden');
+            provinceOther.required = true;
+        } else {
+            provinceOther.classList.add('hidden');
+            provinceOther.required = false;
+        }
+    };
+
+    const plainDefaultProvince = stripProvincePrefix(defaultProvince) || 'สระแก้ว';
+    provinceSelect.value = THAI_PROVINCES.includes(plainDefaultProvince) ? plainDefaultProvince : 'other';
+    if (provinceOther) {
+        provinceOther.value = provinceSelect.value === 'other' ? plainDefaultProvince || '' : '';
+    }
+
+    provinceSelect.onchange = updateProvinceOtherVisibility;
+    updateProvinceOtherVisibility();
+}
+
+function setProvinceFieldValue(selectId, otherInputId, provinceValue) {
+    const normalizedProvince = stripProvincePrefix(provinceValue) || 'สระแก้ว';
+    const provinceSelect = document.getElementById(selectId);
+    const provinceOther = document.getElementById(otherInputId);
+    if (!provinceSelect) return;
+
+    provinceSelect.value = THAI_PROVINCES.includes(normalizedProvince) ? normalizedProvince : 'other';
+    if (provinceOther) {
+        provinceOther.value = provinceSelect.value === 'other' ? normalizedProvince : '';
+        provinceOther.classList.toggle('hidden', provinceSelect.value !== 'other');
+        provinceOther.required = provinceSelect.value === 'other';
+    }
+}
+
+function getProvinceFieldValue(selectId, otherInputId) {
+    const provinceSelect = document.getElementById(selectId);
+    const provinceOther = document.getElementById(otherInputId);
+    if (!provinceSelect) return formatProvinceLabel('สระแก้ว');
+
+    if (provinceSelect.value === 'other') {
+        return formatProvinceLabel(provinceOther?.value.trim() || 'อื่นๆ');
+    }
+    return formatProvinceLabel(provinceSelect.value || 'สระแก้ว');
+}
+
 // ในไฟล์ requests.js
 
 function setupFormConditions() {
-    initProvinceDropdown(); // เรียกฟังก์ชันสร้างจังหวัด
+    setupProvinceField('form-province', 'form-province-other'); // เรียกฟังก์ชันสร้างจังหวัด
 
     const province = document.getElementById('form-province');
     const provinceOther = document.getElementById('form-province-other');
@@ -74,7 +141,7 @@ function setupFormConditions() {
     function checkConditions() {
         if (!province) return;
         
-        const isNotSaKaeo = province.value !== 'สระแก้ว';
+        const isNotSaKaeo = stripProvincePrefix(province.value) !== 'สระแก้ว';
 
         // 1. จัดการช่องจังหวัด "อื่นๆ"
         if(province.value === 'other') {
@@ -144,7 +211,7 @@ async function handleRequestAction(e) {
     }
 }
 
-// ย้ายคำขอไปถังขยะ (soft delete) — กู้คืนได้ภายใน 24 ชม.
+// ลบคำขอออกจากระบบทั้งหมด (hard delete)
 async function handleDeleteRequest(requestId) {
     try {
         const user = getCurrentUser();
@@ -152,14 +219,22 @@ async function handleDeleteRequest(requestId) {
 
         const confirmed = await showConfirm(
             'ยืนยันการลบ',
-            `ต้องการลบคำขอ ${requestId}?\n\nข้อมูลจะถูกเก็บในถังขยะ และสามารถกู้คืนได้ภายใน 24 ชั่วโมง`
+            `ต้องการลบคำขอ ${requestId} ออกจากระบบ?\n\nการดำเนินการนี้ไม่สามารถยกเลิกได้`
         );
         if (!confirmed) return;
 
-        const result = await apiCall('POST', 'softDeleteRequest', { requestId, username: user.username });
-        if (result.status !== 'success') throw new Error(result.message || 'ไม่สามารถลบได้');
+        const safeId = requestId.replace(/[\/\\:\.]/g, '-');
+        if (typeof db !== 'undefined') {
+            await Promise.all([
+                db.collection('requests').doc(safeId).delete().catch(() => {}),
+                db.collection('memos').doc(safeId).delete().catch(() => {})
+            ]);
+        }
+        // Sync ไป GAS (background)
+        apiCall('POST', 'deleteRequest', { requestId, username: user.username })
+            .catch(e => console.warn('GAS delete sync warn:', e));
 
-        showAlert('สำเร็จ', `ลบคำขอ ${requestId} แล้ว\nสามารถกู้คืนได้จาก 🗑️ ถังขยะ ภายใน 24 ชั่วโมง`);
+        showAlert('สำเร็จ', `ลบคำขอ ${requestId} ออกจากระบบเรียบร้อยแล้ว`);
         clearRequestsCache();
         await fetchUserRequests();
 
@@ -169,70 +244,6 @@ async function handleDeleteRequest(requestId) {
     } catch (error) {
         console.error('Error deleting request:', error);
         showAlert('ผิดพลาด', 'เกิดข้อผิดพลาด: ' + error.message);
-    }
-}
-
-// ─── ถังขยะ: แสดงรายการที่ถูกลบ (เฉพาะภายใน 24 ชม.) ───
-async function showTrashBin() {
-    const modal = document.getElementById('trash-modal');
-    const listEl = document.getElementById('trash-list');
-    if (!modal || !listEl) return;
-
-    modal.classList.remove('hidden');
-    listEl.innerHTML = '<p class="text-center text-gray-400 py-6">กำลังโหลด...</p>';
-
-    const user = getCurrentUser();
-    const isAdmin = user && (user.role === 'admin' || user.isAdmin);
-
-    try {
-        const gasRes = await apiCall('GET', 'getTrashItems', isAdmin ? {} : { username: user.username });
-        const items = gasRes.status === 'success' ? (gasRes.data || []) : [];
-
-        if (items.length === 0) {
-            listEl.innerHTML = '<p class="text-center text-gray-400 py-8">ไม่มีรายการในถังขยะ</p>';
-            return;
-        }
-
-        listEl.innerHTML = items.map(item => `
-            <div class="flex items-center justify-between border-b py-3 gap-2">
-                <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-sm text-red-700">${item.id}</p>
-                    <p class="text-sm text-gray-700 truncate">${item.requesterName} — ${item.purpose || '-'}</p>
-                    <p class="text-xs text-gray-400">ลบเมื่อ: ${new Date(item.deletedAt).toLocaleString('th-TH')}${isAdmin && item.deletedBy ? ` โดย ${item.deletedBy}` : ''}</p>
-                </div>
-                <div class="text-right shrink-0">
-                    <p class="text-xs text-orange-500 mb-1">เหลือ ${item.hoursLeft} ชม.</p>
-                    <button onclick="restoreRequest('${item.id}')"
-                        class="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-lg">
-                        ↩ กู้คืน
-                    </button>
-                </div>
-            </div>`).join('');
-    } catch (err) {
-        listEl.innerHTML = `<p class="text-center text-red-400 py-8">โหลดไม่สำเร็จ: ${err.message}</p>`;
-    }
-}
-
-function closeTrashBin() {
-    const modal = document.getElementById('trash-modal');
-    if (modal) modal.classList.add('hidden');
-}
-
-// กู้คืนข้อมูลจากถังขยะ
-async function restoreRequest(requestId) {
-    if (!await showConfirm('กู้คืนข้อมูล', `ยืนยันการกู้คืนคำขอ ${requestId}?`)) return;
-    try {
-        const result = await apiCall('POST', 'restoreRequest', { requestId });
-        if (result.status !== 'success') {
-            showAlert('ผิดพลาด', result.message || 'ไม่สามารถกู้คืนได้');
-            return;
-        }
-        showAlert('สำเร็จ', `กู้คืนคำขอ ${requestId} เรียบร้อยแล้ว`);
-        closeTrashBin();
-        clearRequestsCache();
-        await fetchUserRequests();
-    } catch (err) {
-        showAlert('ผิดพลาด', 'เกิดข้อผิดพลาด: ' + err.message);
     }
 }
 // ==========================================
@@ -321,7 +332,8 @@ function renderUserRequests(requests) {
             noMsg.classList.remove('hidden');
             noMsg.innerHTML = `
                 <div class="text-center py-10">
-                    <p class="text-gray-400 text-lg">ไม่พบประวัติการขอไปราชการในปีนี้</p>
+                    <p class="text-gray-400 text-lg">ยังไม่มีประวัติการขอไปราชการในปีนี้</p>
+                    <p class="text-sm text-gray-500 mt-2">เมื่อสร้างคำขอแล้ว รายการจะมาแสดงที่หน้านี้</p>
                     <button onclick="switchPage('form-page')" class="mt-3 btn bg-indigo-500 hover:bg-indigo-600 text-white btn-sm">
                         + สร้างคำขอใหม่
                     </button>
@@ -517,7 +529,7 @@ function renderRequestsList(requests, memos, searchTerm = '') {
     if (filteredRequests.length === 0) {
         container.classList.add('hidden');
         noRequestsMessage.classList.remove('hidden');
-        noRequestsMessage.textContent = 'ไม่พบคำขอที่ตรงกับการค้นหา';
+        noRequestsMessage.innerHTML = '<p>ไม่พบคำขอที่ตรงกับการค้นหา</p>';
         return;
     }
 
@@ -672,8 +684,6 @@ function renderRequestsList(requests, memos, searchTerm = '') {
 
     container.classList.remove('hidden');
     noRequestsMessage.classList.add('hidden');
-
-    container.addEventListener('click', handleRequestAction);
 }
 
 // --- EDIT PAGE FUNCTIONS ---
@@ -688,11 +698,14 @@ function resetEditPage() {
     sessionStorage.removeItem('currentEditRequestId');
     document.getElementById('edit-request-id').value = '';
     document.getElementById('edit-draft-id').value = '';
+    setProvinceFieldValue('edit-province', 'edit-province-other', 'สระแก้ว');
     
     console.log("✅ Edit page reset complete");
 }
 
 function setupEditPageEventListeners() {
+    setupProvinceField('edit-province', 'edit-province-other');
+
     document.getElementById('back-to-dashboard').addEventListener('click', () => {
         console.log("🏠 Returning to dashboard from edit page");
         switchPage('dashboard-page');
@@ -755,6 +768,7 @@ async function populateEditForm(requestData) {
         document.getElementById('edit-requester-name').value = requestData.requesterName || '';
         document.getElementById('edit-requester-position').value = requestData.requesterPosition || '';
         document.getElementById('edit-location').value = requestData.location || '';
+        setProvinceFieldValue('edit-province', 'edit-province-other', requestData.province || '');
         document.getElementById('edit-purpose').value = requestData.purpose || '';
         document.getElementById('edit-start-date').value = formatDate(requestData.startDate);
         document.getElementById('edit-end-date').value = formatDate(requestData.endDate);
@@ -1185,7 +1199,7 @@ async function generateDocumentFromDraft() {
         if (!validateEditForm(formData)) throw new Error("ข้อมูลไม่ครบถ้วน");
 
         formData.attachmentUrls = [];
-        formData.doctype = 'memo';
+        formData.docType = 'memo';
 
         // Step 2: สร้าง PDF
         setBtnStatus('กำลังสร้างเอกสาร...', true);
@@ -1255,7 +1269,7 @@ async function generateDocumentFromDraft() {
         } else {
             // ไม่มีลายเซ็น → เปิดดูไฟล์ + กลับ dashboard เหมือนเดิม
             showAlert('✅ สำเร็จ', 'บันทึกและสร้างเอกสารเรียบร้อยแล้ว');
-            if (newFileUrl) window.open(newFileUrl, '_blank');
+            if (newFileUrl) openUrlWithDownloadIndicator(newFileUrl, 'กำลังเปิดไฟล์บันทึกข้อความ...');
             switchPage('dashboard-page');
         }
 
@@ -1345,6 +1359,7 @@ function getEditFormData() {
             requesterName: getValue('edit-requester-name').trim(),
             requesterPosition: getValue('edit-requester-position').trim(),
             location: getValue('edit-location').trim(),
+            province: getProvinceFieldValue('edit-province', 'edit-province-other'),
             purpose: getValue('edit-purpose').trim(),
             startDate: getValue('edit-start-date'),
             endDate: getValue('edit-end-date'),
@@ -1513,10 +1528,7 @@ function getRequestFormData() {
     const vehicleChecked = document.querySelector('input[name="vehicle_option"]:checked');
     const vehicleOption = vehicleChecked ? vehicleChecked.value : 'gov';
     // --- ส่วนที่เพิ่ม: จัดการจังหวัด ---
-    let province = document.getElementById('form-province')?.value || 'สระแก้ว';
-    if (province === 'other') {
-        province = document.getElementById('form-province-other')?.value.trim() || 'อื่นๆ';
-    }
+    let province = getProvinceFieldValue('form-province', 'form-province-other');
 
     // 4. รวบรวมข้อมูลทั้งหมดเป็น Object
     return {
@@ -1525,7 +1537,7 @@ function getRequestFormData() {
         requesterPosition: document.getElementById('form-requester-position')?.value.trim(),
         location: document.getElementById('form-location')?.value.trim(),
        // เพิ่มฟิลด์จังหวัดและที่พัก
-        province: document.getElementById('form-province')?.value,
+        province,
         stayAt: document.getElementById('form-stay-at')?.value.trim(),
         // ข้อมูลยานพาหนะ (สำหรับหนังสือส่ง) - เพิ่มใหม่
         dispatchVehicleType: document.getElementById('form-dispatch-vehicle-type')?.value.trim(),
@@ -1912,7 +1924,7 @@ async function handleRequestFormSubmit(e) {
 
         // --- Step 2: สร้าง PDF จาก Cloud Run ---
         setBtnStatus('กำลังสร้างไฟล์ PDF...');
-        const pdfData = { ...formData, id: realId, requestId: realId, doctype: 'memo' };
+        const pdfData = { ...formData, id: realId, requestId: realId, docType: 'memo' };
         
         // รับ PDF ต้นฉบับมาจาก Cloud Run
         let { pdfBlob } = await generateOfficialPDF(pdfData);
@@ -1968,7 +1980,7 @@ async function handleRequestFormSubmit(e) {
         if (typeof showFormResult === 'function') {
             showFormResult(resultTitle, resultMessage, finalFileUrl, realId);
         } else {
-            if (finalFileUrl) window.open(finalFileUrl, '_blank');
+            if (finalFileUrl) openUrlWithDownloadIndicator(finalFileUrl, 'กำลังเปิดไฟล์เอกสาร...');
             showAlert("สำเร็จ", isEdit ? `แก้ไขเอกสารเลขที่ ${realId} เรียบร้อยแล้ว` : `สร้างเอกสารเลขที่ ${realId} เรียบร้อยแล้ว`);
             switchPage('dashboard-page');
         }
@@ -2399,7 +2411,7 @@ async function saveEditRequest() {
         formData.attachments = []; 
         formData.attachmentUrls = [];
 
-        const pdfData = { ...formData, doctype: 'memo' };
+        const pdfData = { ...formData, docType: 'memo' };
         const { pdfBlob } = await generateOfficialPDF(pdfData);
 
         // --- Step 2: อัปโหลดไฟล์ ---
@@ -2445,7 +2457,7 @@ async function saveEditRequest() {
             showAlert("สำเร็จ", "บันทึกการแก้ไขเรียบร้อยแล้ว");
             
             // 2. เปิดไฟล์ใหม่ให้ดูทันที (ใน Tab ใหม่)
-            if (newFileUrl) window.open(newFileUrl, '_blank');
+            if (newFileUrl) openUrlWithDownloadIndicator(newFileUrl, 'กำลังเปิดไฟล์ที่แก้ไขแล้ว...');
             
             // 3. รีเฟรช Dashboard และพากลับไป
             if (typeof clearRequestsCache === 'function') clearRequestsCache();
@@ -2622,19 +2634,28 @@ async function fetchPendingMemos() {
         let requests = (resultNow.status === 'success') ? resultNow.data || [] : [];
 
         // ผสานข้อมูล Firebase เพื่อสถานะที่แม่นยำ
-        if (typeof db !== 'undefined') {
-            const snapshot = await db.collection('requests').where('username', '==', user.username).get();
-            const firebaseData = {};
-            snapshot.forEach(doc => { firebaseData[doc.id] = doc.data(); });
+        if (typeof db !== 'undefined' && user.role !== 'admin') {
+            try {
+                const snapshot = await db.collection('requests').where('username', '==', user.username).get();
+                const firebaseData = {};
+                snapshot.forEach(doc => { firebaseData[doc.id] = doc.data(); });
 
-            requests = requests.map(req => {
-                const safeId = req.id.replace(/[\/\\:\.]/g, '-');
-                const fbDoc = firebaseData[safeId];
-                if (fbDoc) {
-                    return { ...req, ...fbDoc }; // ใช้ข้อมูลล่าสุดจาก FB
+                requests = requests.map(req => {
+                    const safeId = req.id.replace(/[\/\\:\.]/g, '-');
+                    const fbDoc = firebaseData[safeId];
+                    if (fbDoc) {
+                        return { ...req, ...fbDoc }; // ใช้ข้อมูลล่าสุดจาก FB
+                    }
+                    return req;
+                });
+            } catch (firestoreError) {
+                const message = String(firestoreError?.message || firestoreError || '');
+                if (/Missing or insufficient permissions/i.test(message)) {
+                    console.warn('⚠️ Firestore pending memo merge blocked, fallback to GAS only:', message);
+                } else {
+                    throw firestoreError;
                 }
-                return req;
-            });
+            }
         }
 
         // ★ กรองเฉพาะรายการที่ต้องส่งบันทึก ★
@@ -2833,10 +2854,11 @@ async function handleMemoSubmitFromModal(e) {
     const user = getCurrentUser();
     if (!user) return;
 
-    const requestId = document.getElementById('memo-modal-request-id').value;
-    const memoType = document.querySelector('input[name="modal_memo_type"]:checked')?.value || 'non_reimburse';
+    const isAdmin      = user.role === 'admin';
+    const requestId    = document.getElementById('memo-modal-request-id').value;
+    const memoType     = document.querySelector('input[name="modal_memo_type"]:checked')?.value || 'non_reimburse';
+    const preSignedUrl = document.getElementById('pre-signed-memo-url')?.value || '';
 
-    // เบิกค่าใช้จ่าย → ไม่ต้องส่งต่อ ส่งตรงให้ admin ตรวจสอบ
     const forwardToStatus = memoType === 'reimburse'
         ? 'waiting_admin_review'
         : document.getElementById('modal-forward-to')?.value;
@@ -2846,44 +2868,98 @@ async function handleMemoSubmitFromModal(e) {
     }
 
     toggleLoader('send-memo-submit-button', true);
-
-    // อ่าน pre-signed URL (จากการเซ็นออนไลน์) ถ้ามี
-    const preSignedUrl = document.getElementById('pre-signed-memo-url')?.value || '';
+    const btn = document.getElementById('send-memo-submit-button');
 
     try {
-        let finalFileUrlForAdmin = "";
+        if (typeof ensureFirebaseAuth === 'function') await ensureFirebaseAuth();
+        let finalFileUrlForAdmin = '';
 
-        // ★ อัปเดตสถานะการส่งต่อ (docStatus) เข้าไปใน Database ด้วย
+        if (memoType === 'non_reimburse') {
+            // ── 1. รับบันทึกข้อความหลัก ──
+            // แหล่ง A: _memoAutoBase64 (cache จาก Firestore — เร็วที่สุด)
+            // แหล่ง B: fetch จาก preSignedUrl (Firebase Storage — ต้อง CORS)
+            let memoBlob = null;
+            if (window._memoAutoBase64) {
+                try {
+                    const raw = window._memoAutoBase64.replace(/^data:[^;]+;base64,/, "");
+                    const bin = atob(raw);
+                    const arr = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                    memoBlob = new Blob([arr], { type: "application/pdf" });
+                } catch (e) {
+                    console.warn("⚠️ Failed to decode _memoAutoBase64:", e.message);
+                    memoBlob = null;
+                }
+            }
+            
+            if (!memoBlob && preSignedUrl) {
+                btn.innerHTML = "<div class=\"loader\"></div> กำลังโหลดบันทึก...";
+                try {
+                    const resp = await fetch(preSignedUrl);
+                    if (!resp.ok) throw new Error("HTTP " + resp.status);
+                    memoBlob = await resp.blob();
+                } catch (e) {
+                    console.warn("⚠️ Failed to fetch preSignedUrl:", e.message);
+                    if (!isAdmin) throw new Error("ไม่สามารถโหลดเอกสารบันทึกข้อความได้: " + e.message);
+                }
+            }
+
+            if (!memoBlob && !isAdmin) {
+                throw new Error("ไม่พบเอกสารบันทึกข้อความ กรุณาสร้างบันทึกก่อนส่ง");
+            }
+
+            // ── 2. ไฟล์แนบเพิ่มเติม (ตามลำดับที่อัปโหลด) ──
+            const fileExchange = document.getElementById('file-exchange')?.files[0];
+            const fileRefDoc   = document.getElementById('file-ref-doc')?.files[0];
+
+            if (!isAdmin && !fileRefDoc) {
+                throw new Error('กรุณาแนบหนังสือต้นเรื่อง/หนังสือเชิญ (บังคับ)');
+            }
+
+            const extraFiles = [
+                { id: 'file-exchange', file: fileExchange },
+                { id: 'file-ref-doc',  file: fileRefDoc   },
+            ]
+            .filter(d => d.file)
+            .sort((a, b) => (window._memoUploadOrder?.[a.id] || 0) - (window._memoUploadOrder?.[b.id] || 0))
+            .map(d => d.file);
+
+            // ── 3. Merge หรือใช้บันทึกเดี่ยว ──
+            let finalBlob;
+            if (memoBlob && extraFiles.length > 0) {
+                btn.innerHTML = '<div class="loader"></div> กำลังรวมไฟล์ PDF...';
+                // mergeFilesToSinglePDF รับ Blob/File ได้เพราะใช้ .arrayBuffer()
+                finalBlob = await mergeFilesToSinglePDF([memoBlob, ...extraFiles]);
+            } else if (memoBlob) {
+                finalBlob = memoBlob;
+            } else if (isAdmin) {
+                // Admin ส่งโดยไม่มีไฟล์ (bypass)
+                console.log('🛡️ Admin Bypass: ส่งบันทึกโดยไม่มีไฟล์แนบ');
+                finalBlob = null;
+            } else {
+                throw new Error('ไม่พบเอกสารสำหรับส่ง');
+            }
+
+            // ── 4. อัปโหลด ──
+            if (finalBlob) {
+                btn.innerHTML = '<div class="loader"></div> กำลังอัปโหลด...';
+                finalFileUrlForAdmin = await uploadPdfToFirebaseStorage(
+                    finalBlob, user.username,
+                    `Complete_Memo_${requestId.replace(/[\/\\:\.]/g, '-')}.pdf`
+                );
+            }
+        }
+
+        // ── 5. บันทึกลง GAS + Firestore ──
         const updatePayload = {
             requestId:   requestId,
             docStatus:   forwardToStatus,
             status:      'Submitted',
-            wasRejected: false
+            wasRejected: false,
         };
-
-        if (memoType === 'non_reimburse') {
-            // ใช้ไฟล์จาก _memoAutoBase64 หรือ preSignedUrl
-            if (window._memoAutoBase64) {
-                const raw = window._memoAutoBase64.replace(/^data:[^;]+;base64,/, '');
-                const bin = atob(raw);
-                const arr = new Uint8Array(bin.length);
-                for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-                const memoBlob = new Blob([arr], { type: 'application/pdf' });
-
-                const filename = `memo_${requestId.replace(/[\/\\:\.]/g, '-')}.pdf`;
-                finalFileUrlForAdmin = await uploadPdfToFirebaseStorage(memoBlob, user.username, filename);
-            } else if (preSignedUrl) {
-                finalFileUrlForAdmin = preSignedUrl;
-            } else {
-                throw new Error('ไม่พบเอกสารบันทึกข้อความ กรุณาสร้างบันทึกก่อนส่ง');
-            }
-        }
-
         if (finalFileUrlForAdmin) {
             updatePayload.completedMemoUrl = finalFileUrlForAdmin;
-            // ★ ล้าง currentPdfUrl เพื่อให้ผู้ลงนามรอบใหม่เห็นไฟล์ที่ผู้ใช้ส่งมา
-            //    ไม่ใช่ไฟล์ที่มีลายเซ็นจากรอบการลงนามก่อนหน้า (กรณีตีกลับและส่งใหม่)
-            updatePayload.currentPdfUrl = '';
+            updatePayload.currentPdfUrl    = finalFileUrlForAdmin; // ผู้อนุมัติเห็นไฟล์รวมล่าสุด
         }
 
         await apiCall('POST', 'updateRequest', updatePayload);
@@ -2896,27 +2972,34 @@ async function handleMemoSubmitFromModal(e) {
             }, { merge: true });
         }
 
+        // ── 6. แจ้งผลและรีเฟรช ──
         showAlert('สำเร็จ', memoType === 'reimburse'
             ? 'ส่งบันทึกข้อความเรียบร้อยแล้ว (กรุณานำเอกสารฉบับจริงส่งที่งานบุคคล)'
-            : 'ส่งต่อบันทึกข้อความให้หัวหน้าเพื่อพิจารณาเรียบร้อยแล้ว');
-        // เปิดไฟล์ PDF ที่เพิ่งสร้างขึ้นให้ผู้ใช้เห็นทันที
-        if (finalFileUrlForAdmin) window.open(finalFileUrlForAdmin, '_blank');
-        // รีเซ็ต pre-signed state
-        const preSignedInputEl = document.getElementById('pre-signed-memo-url');
+            : (isAdmin && !finalFileUrlForAdmin
+                ? 'อัปเดตสถานะเรียบร้อยแล้ว (Admin Bypass)'
+                : 'รวมไฟล์และส่งบันทึกข้อความเรียบร้อยแล้ว'));
+
+        if (finalFileUrlForAdmin) {
+            openUrlWithDownloadIndicator(finalFileUrlForAdmin, 'กำลังเปิดไฟล์ที่รวมแล้ว...');
+        }
+
+        const preSignedInputEl   = document.getElementById('pre-signed-memo-url');
         const preSignedDisplayEl = document.getElementById('pre-signed-memo-display');
-        if (preSignedInputEl) preSignedInputEl.value = '';
+        if (preSignedInputEl)   preSignedInputEl.value = '';
         if (preSignedDisplayEl) preSignedDisplayEl.classList.add('hidden');
+
         document.getElementById('send-memo-modal').style.display = 'none';
-        
-        await fetchUserRequests(true); // forceRefresh เพื่อเคลียร์ cache หลังส่งสำเร็จ
+        document.getElementById('send-memo-form').reset();
+        window._memoAutoBase64 = null;
+
+        await fetchUserRequests(true);
         switchPage('dashboard-page');
 
     } catch (error) {
         console.error(error);
         showAlert('ผิดพลาด', error.message);
     } finally {
-        const btn = document.getElementById('send-memo-submit-button');
-        if(btn) btn.innerHTML = 'ส่งต่อบันทึก';
+        if (btn) btn.innerHTML = 'ส่งต่อบันทึก';
         toggleLoader('send-memo-submit-button', false);
     }
 }
@@ -2963,7 +3046,7 @@ async function processAndSignDocument(formData, isEdit = false) {
     try {
         console.log("Generating PDF from Cloud Run...");
         // ให้ Cloud Run สร้าง PDF ออกมาก่อน (ใช้ generateOfficialPDF แทน generatePdfFromCloudRun ที่ถูกลบออกแล้ว)
-        formData.doctype = 'memo';
+        formData.docType = 'memo';
         formData.btnId = 'submit-button';
         const { pdfBlob } = await generateOfficialPDF(formData);
         
