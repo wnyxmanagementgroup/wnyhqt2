@@ -2574,6 +2574,8 @@ async function handleSaveAnnouncement(e) {
 async function loadAdminDashboard() {
     if (!checkAdminAccess()) return;
 
+    _setAdminDashboardLoading();
+
     // ใช้ cache ถ้ามีอยู่แล้ว ไม่ต้องดึงใหม่
     let requests = allRequestsCache || [];
     if (!requests.length) {
@@ -2590,6 +2592,19 @@ async function loadAdminDashboard() {
     _renderPipeline(requests);
     _renderOverdueList(requests);
     _renderRecentList(requests);
+}
+
+function _setAdminDashboardLoading() {
+    ['kpi-pending-command', 'kpi-waiting-saraban', 'kpi-waiting-director', 'kpi-done'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<span class="loader-sm"></span>';
+    });
+    const pipeline = document.getElementById('admin-pipeline');
+    if (pipeline) pipeline.innerHTML = renderInlineLoader('กำลังโหลดภาพรวมสายการอนุมัติ...');
+    const overdue = document.getElementById('admin-overdue-list');
+    if (overdue) overdue.innerHTML = renderInlineLoader('กำลังตรวจสอบเอกสารค้างนาน...');
+    const recent = document.getElementById('admin-recent-list');
+    if (recent) recent.innerHTML = renderInlineLoader('กำลังโหลดรายการล่าสุด...');
 }
 
 function _renderKpiCards(requests) {

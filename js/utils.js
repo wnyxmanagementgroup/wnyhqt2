@@ -149,17 +149,40 @@ function showConfirm(title, message) {
 function toggleLoader(buttonId, show) {
     const button = document.getElementById(buttonId);
     if (!button) return;
+    const isButtonLike = ['BUTTON', 'A'].includes(button.tagName);
     const loader = button.querySelector('.loader');
     const text = button.querySelector('span');
     if (show) {
-        if (loader) loader.classList.remove('hidden');
-        if (text) text.classList.add('hidden');
-        button.disabled = true;
+        if (isButtonLike && !button.dataset.origHtml) button.dataset.origHtml = button.innerHTML;
+        if (loader) {
+            loader.classList.remove('hidden');
+            if (text) text.classList.add('hidden');
+        } else if (isButtonLike) {
+            const loadingText = button.dataset.loadingText || 'กำลังดำเนินการ...';
+            button.innerHTML = `<span class="loader-sm"></span> ${loadingText}`;
+        } else if (button.tagName === 'TBODY') {
+            const cols = button.closest('table')?.querySelectorAll('thead th').length || 1;
+            button.innerHTML = `<tr><td colspan="${cols}" class="text-center py-10"><div class="loader mx-auto mb-2"></div><p class="text-gray-500 animate-pulse">กำลังโหลดข้อมูล...</p></td></tr>`;
+        } else if (!button.dataset.loadingManaged) {
+            button.dataset.loadingManaged = '1';
+            button.innerHTML = `<div class="flex flex-col items-center justify-center py-10"><div class="loader mb-2"></div><p class="text-gray-500 animate-pulse">กำลังโหลดข้อมูล...</p></div>`;
+        }
+        if ('disabled' in button) button.disabled = true;
+        button.classList.add('is-loading');
     } else {
         if (loader) loader.classList.add('hidden');
         if (text) text.classList.remove('hidden');
-        button.disabled = false;
+        if (isButtonLike && button.dataset.origHtml) {
+            button.innerHTML = button.dataset.origHtml;
+            delete button.dataset.origHtml;
+        }
+        if ('disabled' in button) button.disabled = false;
+        button.classList.remove('is-loading');
     }
+}
+
+function renderInlineLoader(message = 'กำลังโหลดข้อมูล...') {
+    return `<div class="flex flex-col items-center justify-center py-10"><div class="loader mb-2"></div><p class="text-gray-500 animate-pulse">${escapeHtml(message)}</p></div>`;
 }
 
 let _downloadIndicatorActiveCount = 0;

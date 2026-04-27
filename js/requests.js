@@ -345,6 +345,7 @@ async function fetchUserRequests(forceRefresh = false) {
 
     // UI: แสดง Loader ถ้าต้องยิง API ใหม่
     const container = document.getElementById('user-requests-list');
+    const tableWrapper = document.getElementById('requests-table-wrapper');
     const noMsg = document.getElementById('no-requests-message');
     
     if (container) {
@@ -354,6 +355,7 @@ async function fetchUserRequests(forceRefresh = false) {
                 <p class="text-gray-500 animate-pulse mt-2">กำลังดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์...</p>
             </td></tr>`;
     }
+    if (tableWrapper) tableWrapper.classList.remove('hidden');
     if (noMsg) noMsg.classList.add('hidden');
 
     try {
