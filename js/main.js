@@ -767,6 +767,7 @@ function handleExcelImport(e) {
                     list.appendChild(attendeeDiv);
                 }
             });
+            if (typeof updateRequestFormTravelScheduleSection === 'function') updateRequestFormTravelScheduleSection();
             showAlert('สำเร็จ', 'นำเข้าข้อมูลผู้ร่วมเดินทางสำเร็จ');
         };
         reader.readAsArrayBuffer(file);

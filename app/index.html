@@ -376,11 +376,28 @@
 </div>
 </div>
  <div class="mt-4"><label for="form-purpose" class="form-label">เพื่อ</label><textarea id="form-purpose" rows="2" class="form-input" required></textarea></div>
-                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                                   <div><label for="form-start-date" class="form-label">ตั้งแต่วันที่</label><input type="date" id="form-start-date" class="form-input" required></div><div><label>เวลาไป (น.)</label><input type="time" id="form-start-time" class="form-input" value="06:00"></div>
-                                   <div><label for="form-end-date" class="form-label">ถึงวันที่</label><input type="date" id="form-end-date" class="form-input" required></div><div><label>เวลากลับ (น.)</label><input type="time" id="form-end-time" class="form-input" value="18:00"></div>
-                              </div>
-                         </fieldset>
+	                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+	                                   <div><label for="form-start-date" class="form-label">ตั้งแต่วันที่</label><input type="date" id="form-start-date" class="form-input" required></div><div><label>เวลาไป (น.)</label><input type="time" id="form-start-time" class="form-input" value="06:00"></div>
+	                                   <div><label for="form-end-date" class="form-label">ถึงวันที่</label><input type="date" id="form-end-date" class="form-input" required></div><div><label>เวลากลับ (น.)</label><input type="time" id="form-end-time" class="form-input" value="18:00"></div>
+	                              </div>
+                                  <div id="form-travel-schedule-section" class="hidden mt-5 bg-emerald-50 p-4 border border-emerald-200 rounded-lg">
+                                      <h4 class="text-sm font-bold text-emerald-800 mb-3">📅 กำหนดการเดินทางพานักเรียน</h4>
+                                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                          <div>
+                                              <label for="form-ts-requester-tel" class="form-label text-emerald-700">เบอร์โทรครูผู้ควบคุม</label>
+                                              <input type="text" id="form-ts-requester-tel" class="form-input" placeholder="0xx-xxx-xxxx">
+                                          </div>
+                                          <div>
+                                              <label for="form-ts-driver-name" class="form-label text-emerald-700">ชื่อพนักงานขับรถ</label>
+                                              <input type="text" id="form-ts-driver-name" class="form-input" placeholder="ชื่อ-นามสกุล">
+                                          </div>
+                                      </div>
+                                      <div class="mt-4">
+                                          <div class="text-sm font-semibold text-gray-700 mb-2">กำหนดการเดินทาง (แต่ละวัน)</div>
+                                          <div id="form-ts-itinerary-rows" class="space-y-3"></div>
+                                      </div>
+                                  </div>
+	                         </fieldset>
                             <fieldset class="border p-4 rounded-lg mb-6"><legend>ผู้ร่วมเดินทาง (ถ้ามี)</legend>
                                 <div id="form-attendees-list"></div>
                                 <div class="flex flex-wrap gap-2 mt-4">
@@ -2298,11 +2315,12 @@
 <div id="travel-schedule-modal" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,0.55); display:none; align-items:center; justify-content:center; padding:16px;">
   <div style="background:#fff; border-radius:16px; width:100%; max-width:600px; max-height:92vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.25); padding:28px 28px 24px;">
 
-    <!-- Header -->
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
-      <h2 style="font-size:1.15rem; font-weight:700; color:#065f46; margin:0;">📅 สร้างกำหนดการเดินทางพานักเรียน</h2>
-      <button onclick="closeTravelScheduleModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6b7280;line-height:1;">✕</button>
-    </div>
+	    <!-- Header -->
+	    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+	      <h2 style="font-size:1.15rem; font-weight:700; color:#065f46; margin:0;">📅 สร้างกำหนดการเดินทางพานักเรียน</h2>
+	      <button onclick="closeTravelScheduleModal()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:#6b7280;line-height:1;">✕</button>
+	    </div>
+        <div id="ts-file-status" style="display:none; margin:-6px 0 14px; padding:10px 12px; border-radius:10px; background:#ecfdf5; border:1px solid #bbf7d0; color:#047857; font-size:0.85rem; font-weight:600;"></div>
 
     <!-- Info grid (read-only) -->
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; background:#f0fdf4; border-radius:10px; padding:14px; margin-bottom:18px; font-size:0.85rem;">
@@ -2334,13 +2352,17 @@
       <div id="ts-itinerary-rows"></div>
     </div>
 
-    <!-- Action buttons -->
-    <div style="display:flex; gap:12px;">
-      <button onclick="generateTravelSchedulePDF()" id="ts-generate-btn"
-        style="flex:1; background:linear-gradient(135deg,#065f46,#047857); color:#fff; border:none; border-radius:10px; padding:11px 0; font-size:0.9rem; font-weight:700; cursor:pointer;">
-        📄 สร้าง PDF
-      </button>
-      <button onclick="closeTravelScheduleModal()"
+	    <!-- Action buttons -->
+	    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button onclick="saveTravelScheduleDraft()" id="ts-save-btn"
+            style="flex:1; min-width:140px; background:#e0f2fe; color:#0369a1; border:none; border-radius:10px; padding:11px 0; font-size:0.9rem; font-weight:700; cursor:pointer;">
+            💾 บันทึกข้อมูล
+          </button>
+	      <button onclick="generateTravelSchedulePDF()" id="ts-generate-btn"
+	        style="flex:1; min-width:140px; background:linear-gradient(135deg,#065f46,#047857); color:#fff; border:none; border-radius:10px; padding:11px 0; font-size:0.9rem; font-weight:700; cursor:pointer;">
+	        📄 สร้าง PDF
+	      </button>
+	      <button onclick="closeTravelScheduleModal()"
         style="padding:11px 20px; background:#f3f4f6; color:#374151; border:none; border-radius:10px; font-size:0.9rem; font-weight:600; cursor:pointer;">
         ยกเลิก
       </button>

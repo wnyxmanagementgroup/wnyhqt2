@@ -111,6 +111,9 @@ async function fetchAllRequestsForCommand() {
                         docStatus: req.docStatus || fb.docStatus || '',
                         attendees: req.attendees || fb.attendees || [],
                         attendeeCount: req.attendeeCount || fb.attendeeCount || 0,
+                        travelSchedule: fb.travelSchedule || req.travelSchedule || null,
+                        travelSchedulePdfUrl: fb.travelSchedulePdfUrl || req.travelSchedulePdfUrl || '',
+                        travelScheduleStatus: fb.travelScheduleStatus || req.travelScheduleStatus || '',
                         timestamp: req.timestamp || fb.timestamp || '',
                     };
                 });
@@ -468,6 +471,8 @@ function renderAdminRequestsList(requests) {
 
         // --- หนังสือส่ง ---
         const dispatchUrl = request.dispatchBookUrl || request.dispatchBookPdfUrl;
+        const travelScheduleUrl = request.travelSchedulePdfUrl || request.travelScheduleUrl;
+        const hasTravelScheduleData = !!(request.travelSchedule && JSON.stringify(request.travelSchedule) !== '{}');
         const dispatchBtn = dispatchUrl
             ? `<div class="flex gap-1 w-full">
                    <a href="${dispatchUrl}" target="_blank" class="btn btn-xs flex-1 text-center" style="background:linear-gradient(135deg,#a855f7,#9333ea);color:white;">📦 ดู</a>
@@ -505,6 +510,11 @@ function renderAdminRequestsList(requests) {
         const dispatchBadge = dispatchUrl
             ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#f3e8ff;color:#7e22ce;border:1px solid #e9d5ff;">📦 หนังสือส่ง</span>`
             : '';
+        const travelScheduleBadge = travelScheduleUrl
+            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#ecfdf5;color:#047857;border:1px solid #bbf7d0;">📅 มีกำหนดการ</span>`
+            : (hasTravelScheduleData
+                ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">💾 บันทึกกำหนดการ</span>`
+                : '');
 
         // สถานะหลัก + docStatus
         const mainStatus   = request.status    || '';
@@ -544,7 +554,7 @@ function renderAdminRequestsList(requests) {
             </td>
             <td class="text-center">${expenseCell}</td>
             <td>
-                <div class="flex flex-wrap gap-1 mb-1.5">${statusBadge}${dispatchBadge}</div>
+                <div class="flex flex-wrap gap-1 mb-1.5">${statusBadge}${dispatchBadge}${travelScheduleBadge}</div>
                 <div class="flex flex-wrap gap-1 mb-1">${mainStatusBadge}</div>
                 <div class="flex flex-wrap gap-1 items-center">${docStatusBadge}${draftPdfBtn}</div>
             </td>
@@ -552,7 +562,8 @@ function renderAdminRequestsList(requests) {
                 <div class="flex flex-col gap-1.5 items-stretch" style="min-width:128px">
                     ${commandActionBtn}
                     ${dispatchBtn}
-                    ${isEligibleForTravelSchedule(request) ? `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#065f46,#047857);color:white;">📅 กำหนดการเดินทาง</button>` : ''}
+                    ${travelScheduleUrl ? `<a href="${sanitizeUrl(travelScheduleUrl)}" target="_blank" class="btn btn-xs w-full" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">📅 ดูกำหนดการ</a>` : ''}
+                    ${isEligibleForTravelSchedule(request) ? `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#065f46,#047857);color:white;">${travelScheduleUrl ? '✏️ แก้กำหนดการ' : '📅 กำหนดการเดินทาง'}</button>` : ''}
                     <button onclick="openCustomStatusModal('${safeId}', '${safeStatus}', '${safeDocStatus}')"
                         class="btn btn-xs w-full" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;">
                         ✏️ เปลี่ยนสถานะ
@@ -2973,6 +2984,13 @@ function openTravelScheduleModal(req) {
 
     const vehicleLabel = {gov:'รถราชการ', private:'รถยนต์ส่วนตัว', public:'รถสาธารณะ'}[req.vehicleOption] || req.vehicleOption || '—';
     const att = _tsAttendees(req);
+    const savedSchedule = (typeof parseTravelScheduleData === 'function')
+        ? parseTravelScheduleData(req.travelSchedule)
+        : (req.travelSchedule || { requesterTel: '', driverName: '', itinerary: [] });
+    const savedItinerary = {};
+    (savedSchedule.itinerary || []).forEach(item => {
+        if (item.date) savedItinerary[item.date] = item.detail || '';
+    });
 
     document.getElementById('ts-requester-name').textContent     = req.requesterName     || '—';
     document.getElementById('ts-requester-position').textContent = req.requesterPosition || '—';
@@ -2983,9 +3001,17 @@ function openTravelScheduleModal(req) {
     document.getElementById('ts-total-count').textContent        = att.length + ' คน';
     document.getElementById('ts-date-range').textContent         = _tsTH(req.startDate) + ' ถึง ' + _tsTH(req.endDate);
 
-    // รีเซ็ต editable fields
-    document.getElementById('ts-requester-tel').value = '';
-    document.getElementById('ts-driver-name').value   = '';
+    // เติมข้อมูลเดิมถ้าผู้ขอหรือแอดมินเคยบันทึกไว้
+    document.getElementById('ts-requester-tel').value = savedSchedule.requesterTel || '';
+    document.getElementById('ts-driver-name').value   = savedSchedule.driverName || '';
+    const statusEl = document.getElementById('ts-file-status');
+    const scheduleUrl = req.travelSchedulePdfUrl || req.travelScheduleUrl || '';
+    if (statusEl) {
+        statusEl.style.display = scheduleUrl ? 'block' : (savedSchedule.requesterTel || savedSchedule.driverName || (savedSchedule.itinerary || []).length ? 'block' : 'none');
+        statusEl.innerHTML = scheduleUrl
+            ? `มีไฟล์กำหนดการแล้ว <a href="${sanitizeUrl(scheduleUrl)}" target="_blank" style="color:#047857;text-decoration:underline;">เปิดไฟล์</a>`
+            : 'มีข้อมูลกำหนดการที่บันทึกไว้ แต่ยังไม่ได้สร้างไฟล์ PDF';
+    }
 
     // สร้าง textarea สำหรับแต่ละวัน
     const container = document.getElementById('ts-itinerary-rows');
@@ -2995,14 +3021,15 @@ function openTravelScheduleModal(req) {
     const _localDateStr = dt => `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const idx    = Math.round((d - start) / 86400000);
-        const dateTH = _tsTH(_localDateStr(d));
+        const iso    = _localDateStr(d);
+        const dateTH = _tsTH(iso);
         container.insertAdjacentHTML('beforeend', `
             <div style="margin-bottom:12px;">
               <label style="font-size:0.82rem; font-weight:600; color:#374151; display:block; margin-bottom:4px;">
                 วันที่ ${idx + 1}: ${dateTH}
               </label>
-              <textarea id="ts-day-${idx}" rows="2" placeholder="ระบุกิจกรรม/สถานที่ในวันนี้..."
-                style="width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:0.88rem; resize:vertical; box-sizing:border-box;"></textarea>
+              <textarea id="ts-day-${idx}" data-ts-date="${iso}" rows="2" placeholder="ระบุกิจกรรม/สถานที่ในวันนี้..."
+                style="width:100%; border:1px solid #d1d5db; border-radius:8px; padding:8px 10px; font-size:0.88rem; resize:vertical; box-sizing:border-box;">${escapeHtml(savedItinerary[iso] || '')}</textarea>
             </div>`);
     }
 
@@ -3017,29 +3044,80 @@ function closeTravelScheduleModal() {
     window._travelScheduleReq = null;
 }
 
+function _collectTravelScheduleModalData() {
+    const req = window._travelScheduleReq;
+    if (!req) return null;
+    const tel = (document.getElementById('ts-requester-tel').value || '').trim();
+    const driver = (document.getElementById('ts-driver-name').value || '').trim();
+    const itinerary = Array.from(document.querySelectorAll('#ts-itinerary-rows textarea[data-ts-date]')).map(textarea => ({
+        date: textarea.dataset.tsDate || '',
+        dateText: _tsTH(textarea.dataset.tsDate || ''),
+        detail: textarea.value.trim()
+    }));
+    return { requesterTel: tel, driverName: driver, itinerary };
+}
+
+async function _saveTravelScheduleToFirestore(extra = {}) {
+    const req = window._travelScheduleReq;
+    const schedule = _collectTravelScheduleModalData();
+    if (!req || !schedule) throw new Error('ไม่พบข้อมูลคำขอ');
+    const requestId = req.id || req.requestId;
+    if (!requestId) throw new Error('ไม่พบเลขที่คำขอ');
+    const safeId = requestId.replace(/[\/\\:\.]/g, '-');
+    const user = getCurrentUser() || {};
+    const updateData = {
+        travelSchedule: schedule,
+        travelScheduleStatus: extra.travelSchedulePdfUrl ? 'generated' : 'draft',
+        travelScheduleUpdatedBy: user.username || user.name || 'user',
+        travelScheduleUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+        ...extra
+    };
+    await db.collection('requests').doc(safeId).set(updateData, { merge: true });
+    Object.assign(req, updateData, { travelSchedule: schedule });
+    return { safeId, schedule, updateData };
+}
+
+async function _refreshTravelScheduleLists() {
+    if (typeof clearRequestsCache === 'function') clearRequestsCache();
+    if (typeof fetchUserRequests === 'function') await fetchUserRequests(true);
+    const user = getCurrentUser();
+    if (user?.role === 'admin' && typeof fetchAllRequestsForCommand === 'function') {
+        await fetchAllRequestsForCommand();
+    }
+}
+
+async function saveTravelScheduleDraft() {
+    const btn = document.getElementById('ts-save-btn');
+    try {
+        if (typeof db === 'undefined') throw new Error('ไม่สามารถเชื่อมต่อฐานข้อมูลได้');
+        if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
+        await _saveTravelScheduleToFirestore();
+        await _refreshTravelScheduleLists();
+        showAlert('สำเร็จ', 'บันทึกข้อมูลกำหนดการเดินทางเรียบร้อยแล้ว');
+    } catch (err) {
+        console.error('saveTravelScheduleDraft error:', err);
+        showAlert('ผิดพลาด', err.message || 'บันทึกข้อมูลไม่สำเร็จ');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '💾 บันทึกข้อมูล'; }
+    }
+}
+
 // สร้าง PDF กำหนดการเดินทาง
 async function generateTravelSchedulePDF() {
     const req    = window._travelScheduleReq;
     if (!req) return;
-    const tel    = (document.getElementById('ts-requester-tel').value || '').trim();
-    const driver = (document.getElementById('ts-driver-name').value   || '').trim();
-    if (!tel || !driver) {
+    const schedule = _collectTravelScheduleModalData();
+    if (!schedule?.requesterTel || !schedule?.driverName) {
         showAlert('กรุณากรอกข้อมูลให้ครบ', 'ต้องกรอกเบอร์โทรครูผู้ควบคุม และชื่อพนักงานขับรถ');
         return;
     }
 
     // รวบรวม itinerary
-    const start     = new Date(req.startDate + 'T00:00:00');
-    const end       = new Date(req.endDate   + 'T00:00:00');
-    const _localDS = dt => `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
-    const itinerary = [];
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const idx = Math.round((d - start) / 86400000);
-        itinerary.push({
-            date:   _tsTH(_localDS(d)),
-            detail: (document.getElementById('ts-day-' + idx)?.value || '').trim()
-        });
-    }
+    const itinerary = schedule.itinerary.map(item => ({
+        date: item.dateText || _tsTH(item.date),
+        detail: item.detail || ''
+    }));
 
     const att        = _tsAttendees(req);
     const vehicleMap = {gov:'รถราชการ', private:'รถยนต์ส่วนตัว', public:'รถสาธารณะ'};
@@ -3051,7 +3129,7 @@ async function generateTravelSchedulePDF() {
 
     try {
         // โหลด template
-        const resp    = await fetch('./template_travel_schedule.docx');
+        const resp    = await fetch('../template_travel_schedule.docx');
         if (!resp.ok) throw new Error('ไม่พบไฟล์แม่แบบ template_travel_schedule.docx');
         const content = await resp.arrayBuffer();
         const zip     = new PizZip(content);
@@ -3060,10 +3138,10 @@ async function generateTravelSchedulePDF() {
         doc.render({
             requesterName:      req.requesterName     || '',
             requester_position: req.requesterPosition || '',
-            requester_tel:      tel,
+            requester_tel:      schedule.requesterTel,
             vehicle:            vehicleMap[req.vehicleOption] || req.vehicleOption || '',
             license_plate:      req.licensePlate      || '',
-            driver_name:        driver,
+            driver_name:        schedule.driverName,
             total_count:        toNum(att.length),
             location:           req.location          || '',
             purpose:            req.purpose           || '',
@@ -3084,6 +3162,16 @@ async function generateTravelSchedulePDF() {
         if (!pdfResp.ok) throw new Error('ไม่สามารถแปลงเป็น PDF ได้ (Cloud Run: ' + pdfResp.status + ')');
         const pdfBlob = await pdfResp.blob();
 
+        const requestId = req.id || req.requestId || 'travel_schedule';
+        const safeId = requestId.replace(/[\/\\:\.\s]/g, '-');
+        const username = req.username || getCurrentUser()?.username || 'user';
+        const filename = `travel_schedule_${safeId}_${Date.now()}.pdf`;
+        const uploadedUrl = await uploadPdfToFirebaseStorage(pdfBlob, username, filename);
+        await _saveTravelScheduleToFirestore({
+            travelSchedulePdfUrl: uploadedUrl,
+            travelScheduleGeneratedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
         // ดาวน์โหลด PDF
         const url = URL.createObjectURL(pdfBlob);
         triggerBrowserDownload(
@@ -3093,6 +3181,7 @@ async function generateTravelSchedulePDF() {
         );
         URL.revokeObjectURL(url);
 
+        await _refreshTravelScheduleLists();
         closeTravelScheduleModal();
         showAlert('สำเร็จ', 'สร้างไฟล์กำหนดการเดินทางเรียบร้อยแล้ว');
     } catch(err) {

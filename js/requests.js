@@ -121,6 +121,70 @@ function getProvinceFieldValue(selectId, otherInputId) {
     return formatProvinceLabel(provinceSelect.value || 'สระแก้ว');
 }
 
+function parseTravelScheduleData(value) {
+    if (!value) return { requesterTel: '', driverName: '', itinerary: [] };
+    if (typeof value === 'string') {
+        try { value = JSON.parse(value); } catch(e) { value = {}; }
+    }
+    return {
+        requesterTel: value.requesterTel || value.requester_tel || '',
+        driverName: value.driverName || value.driver_name || '',
+        itinerary: Array.isArray(value.itinerary) ? value.itinerary : []
+    };
+}
+
+function collectFormTravelSchedule(prefix = 'form') {
+    const section = document.getElementById(`${prefix}-travel-schedule-section`);
+    const rowsContainer = document.getElementById(`${prefix}-ts-itinerary-rows`);
+    if (section && section.classList.contains('hidden')) return null;
+
+    const requesterTel = document.getElementById(`${prefix}-ts-requester-tel`)?.value?.trim() || '';
+    const driverName = document.getElementById(`${prefix}-ts-driver-name`)?.value?.trim() || '';
+    const itinerary = Array.from(rowsContainer?.querySelectorAll('textarea[data-ts-date]') || []).map((textarea) => ({
+        date: textarea.dataset.tsDate || '',
+        detail: textarea.value.trim()
+    }));
+
+    if (!requesterTel && !driverName && itinerary.every(item => !item.detail)) return null;
+    return { requesterTel, driverName, itinerary };
+}
+
+function updateRequestFormTravelScheduleSection() {
+    const section = document.getElementById('form-travel-schedule-section');
+    const rowsContainer = document.getElementById('form-ts-itinerary-rows');
+    if (!section || !rowsContainer) return;
+
+    const province = getProvinceFieldValue('form-province', 'form-province-other');
+    const startDate = document.getElementById('form-start-date')?.value || '';
+    const endDate = document.getElementById('form-end-date')?.value || '';
+    const start = startDate ? new Date(startDate + 'T00:00:00') : null;
+    const end = endDate ? new Date(endDate + 'T00:00:00') : null;
+    const hasStudents = Array.from(document.querySelectorAll('#form-attendees-list .attendee-position-select, #form-attendees-list .attendee-position-other'))
+        .some(el => String(el.value || '').includes('นักเรียน'));
+    const shouldShow = stripProvincePrefix(province) !== 'สระแก้ว'
+        && start && end && end > start
+        && hasStudents;
+
+    section.classList.toggle('hidden', !shouldShow);
+    if (!shouldShow) return;
+
+    const existing = {};
+    rowsContainer.querySelectorAll('textarea[data-ts-date]').forEach(textarea => {
+        existing[textarea.dataset.tsDate] = textarea.value;
+    });
+
+    rowsContainer.innerHTML = '';
+    const dateFormatter = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'long', year: 'numeric' });
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        rowsContainer.insertAdjacentHTML('beforeend', `
+            <div>
+                <label class="form-label text-emerald-700">วันที่ ${dateFormatter.format(d)}</label>
+                <textarea data-ts-date="${iso}" rows="2" class="form-input" placeholder="ระบุกิจกรรม/สถานที่ในวันนี้...">${escapeHtml(existing[iso] || '')}</textarea>
+            </div>`);
+    }
+}
+
 // ในไฟล์ requests.js
 
 function setupFormConditions() {
@@ -128,6 +192,9 @@ function setupFormConditions() {
 
     const province = document.getElementById('form-province');
     const provinceOther = document.getElementById('form-province-other');
+    const startDateInput = document.getElementById('form-start-date');
+    const endDateInput = document.getElementById('form-end-date');
+    const attendeesList = document.getElementById('form-attendees-list');
     
     // Elements ที่พัก
     const stayContainer = document.getElementById('form-stay-container');
@@ -174,12 +241,18 @@ function setupFormConditions() {
             vehicleIdInput.required = false;
             vehicleIdInput.value = '';
         }
+        updateRequestFormTravelScheduleSection();
     }
 
     if (province) {
         province.addEventListener('change', checkConditions);
         checkConditions(); // เรียกครั้งแรก
     }
+    provinceOther?.addEventListener('input', updateRequestFormTravelScheduleSection);
+    startDateInput?.addEventListener('change', updateRequestFormTravelScheduleSection);
+    endDateInput?.addEventListener('change', updateRequestFormTravelScheduleSection);
+    attendeesList?.addEventListener('input', updateRequestFormTravelScheduleSection);
+    attendeesList?.addEventListener('change', updateRequestFormTravelScheduleSection);
 }
 // จัดการปุ่ม Action ต่างๆ (แก้ไข, ลบ, ส่งบันทึก)
 async function handleRequestAction(e) {
@@ -291,6 +364,31 @@ async function fetchUserRequests(forceRefresh = false) {
         let requests = (result.status === 'success') ? (result.data || []) : [];
         console.log(`📋 Loaded ${requests.length} requests from GAS Sheets`);
 
+        if (typeof db !== 'undefined') {
+            try {
+                const fbSnapshot = await db.collection('requests').where('username', '==', user.username).get();
+                const fbMap = {};
+                fbSnapshot.forEach(doc => {
+                    const data = doc.data() || {};
+                    fbMap[doc.id] = data;
+                    if (data.id) fbMap[data.id] = data;
+                });
+                requests = requests.map(req => {
+                    const rawId = req.id || req.requestId || '';
+                    const safeId = rawId.replace(/[\/\\:\.]/g, '-');
+                    const fb = fbMap[safeId] || fbMap[rawId] || {};
+                    return {
+                        ...req,
+                        ...fb,
+                        id: req.id || fb.id || rawId,
+                        requestId: req.requestId || fb.requestId || req.id || fb.id || rawId
+                    };
+                });
+            } catch (firestoreError) {
+                console.warn('⚠️ Firestore enrich skipped in fetchUserRequests:', firestoreError?.message || firestoreError);
+            }
+        }
+
         // ── 3. เรียงลำดับ (ใหม่ -> เก่า) ──
         if (requests.length > 0) {
             requests.sort((a, b) => {
@@ -361,6 +459,8 @@ function renderUserRequests(requests) {
         const draftMemoUrl        = req.fileUrl || req.pdfUrl || req.memoPdfUrl;
         const completedCommandUrl = req.completedCommandUrl || req.commandPdfUrl || req.commandBookUrl;
         const dispatchBookUrl     = req.dispatchBookUrl || req.dispatchBookPdfUrl;
+        const travelScheduleUrl   = req.travelSchedulePdfUrl || req.travelScheduleUrl;
+        const hasTravelScheduleData = !!(req.travelSchedule && JSON.stringify(req.travelSchedule) !== '{}');
 
         // สถานะ
         const hasAdminFile  = !!adminMemoUrl;
@@ -396,6 +496,11 @@ function renderUserRequests(requests) {
         } else {
             statusBadge = `<span class="${_badgeBase}" style="background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;">… ดำเนินการ</span>`;
         }
+        const travelScheduleBadge = travelScheduleUrl
+            ? `<span class="${_badgeBase}" style="background:#ecfdf5;color:#047857;border:1px solid #bbf7d0;">📅 มีกำหนดการ</span>`
+            : (hasTravelScheduleData
+                ? `<span class="${_badgeBase}" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">💾 บันทึกกำหนดการแล้ว</span>`
+                : '');
 
         // ปุ่มดำเนินการ (compact สำหรับ table)
         let actionBtns = '';
@@ -412,6 +517,7 @@ function renderUserRequests(requests) {
         _addAdminFile(adminMemoUrl,        'บันทึกข้อความ',  '📄');
         _addAdminFile(completedCommandUrl, 'คำสั่งไปราชการ', '📋');
         _addAdminFile(dispatchBookUrl,     'หนังสือส่ง',     '📦');
+        _addAdminFile(travelScheduleUrl,   'กำหนดการเดินทาง', '📅');
 
         if (_adminFiles.length === 1) {
             // ไฟล์เดียว → link โดยตรง
@@ -457,7 +563,8 @@ function renderUserRequests(requests) {
         }
         // ปุ่มสร้างกำหนดการเดินทางพานักเรียน (แสดงเฉพาะกรณีที่ผ่านเงื่อนไข)
         if (typeof isEligibleForTravelSchedule === 'function' && isEligibleForTravelSchedule(req)) {
-            actionBtns += `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#065f46,#047857);color:white;border:none;">📅 กำหนดการเดินทาง</button>`;
+            const scheduleLabel = travelScheduleUrl ? '✏️ แก้กำหนดการ' : (hasTravelScheduleData ? '📅 สร้างไฟล์กำหนดการ' : '📅 กรอกกำหนดการ');
+            actionBtns += `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#065f46,#047857);color:white;border:none;">${scheduleLabel}</button>`;
         }
 
         // ปุ่มแก้ไข/ลบ
@@ -495,7 +602,7 @@ function renderUserRequests(requests) {
                 <div>${formatDate(req.startDate)}</div>
                 <div class="text-gray-400">– ${formatDate(req.endDate)}</div>
             </td>
-            <td>${statusBadge}</td>
+            <td><div class="flex flex-wrap gap-1.5">${statusBadge}${travelScheduleBadge}</div></td>
             <td>
                 <div class="flex flex-col gap-1 items-stretch" style="min-width:128px">
                     ${actionBtns}
@@ -1405,6 +1512,8 @@ async function resetRequestForm() {
     document.getElementById('request-form').reset();
     document.getElementById('form-request-id').value = '';
     document.getElementById('form-attendees-list').innerHTML = '';
+    if (document.getElementById('form-ts-itinerary-rows')) document.getElementById('form-ts-itinerary-rows').innerHTML = '';
+    document.getElementById('form-travel-schedule-section')?.classList.add('hidden');
     document.getElementById('form-result').classList.add('hidden');
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('form-doc-date').value = today;
@@ -1444,7 +1553,9 @@ function addAttendeeField() {
     const otherInput = attendeeDiv.querySelector('.attendee-position-other');
     select.addEventListener('change', () => {
         otherInput.classList.toggle('hidden', select.value !== 'other');
+        updateRequestFormTravelScheduleSection();
     });
+    updateRequestFormTravelScheduleSection();
 }
 
 function toggleExpenseOptions() {
@@ -1530,6 +1641,8 @@ function getRequestFormData() {
     // --- ส่วนที่เพิ่ม: จัดการจังหวัด ---
     let province = getProvinceFieldValue('form-province', 'form-province-other');
 
+    const travelSchedule = collectFormTravelSchedule('form');
+
     // 4. รวบรวมข้อมูลทั้งหมดเป็น Object
     return {
         docDate: document.getElementById('form-doc-date')?.value || '',
@@ -1563,7 +1676,9 @@ function getRequestFormData() {
         publicVehicleDetails: document.getElementById('public-vehicle-details-input')?.value || '', 
         
         department: document.getElementById('form-department')?.value,
-        headName: document.getElementById('form-head-name')?.value
+        headName: document.getElementById('form-head-name')?.value,
+        travelSchedule: travelSchedule || null,
+        travelScheduleStatus: travelSchedule ? 'draft' : ''
     };
 }
 
@@ -1949,6 +2064,22 @@ async function handleRequestFormSubmit(e) {
 
         finalFileUrl = await uploadPdfToFirebaseStorage(pdfBlob, user.username, safeFilename);
         console.log('✅ PDF uploaded to Firebase Storage:', finalFileUrl);
+
+        if (typeof db !== 'undefined') {
+            const docId = realId.replace(/[\/\\:\.]/g, '-');
+            await db.collection('requests').doc(docId).set({
+                ...formData,
+                id: realId,
+                requestId: realId,
+                username: user.username,
+                fileUrl: finalFileUrl,
+                pdfUrl: finalFileUrl,
+                memoPdfUrl: finalFileUrl,
+                status: formData.status,
+                docStatus: formData.docStatus,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
 
         // --- Step 4: อัปเดต URL ไฟล์ PDF ลงใน Google Sheets ---
         setBtnStatus('กำลังปรับปรุงฐานข้อมูล...');
