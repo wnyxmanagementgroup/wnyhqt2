@@ -73,7 +73,7 @@ async function handleLogin(e) {
             sessionStorage.setItem('currentUser', JSON.stringify(realUser));
             window.currentUser = realUser;
             
-            initializeUserSession(realUser);
+            await initializeUserSession(realUser);
             showMainApp();
             checkAndShowAnnouncement();
         } else {
@@ -135,6 +135,10 @@ async function initializeUserSession(user) {
     if (sidebarName) sidebarName.textContent = user.fullName || user.username;
     const sidebarPos = document.getElementById('user-position-sidebar');
     if (sidebarPos) sidebarPos.textContent = user.position || (user.role === 'admin' ? 'ผู้ดูแลระบบ' : 'ผู้ใช้งานทั่วไป');
+
+    if (typeof loadSystemWorkflowSettings === 'function') {
+        await loadSystemWorkflowSettings();
+    }
     
     // 3. จัดการเมนู Admin (แก้ไขให้เรียก ID ที่ถูกต้องใน HTML)
     const adminBtnCommand       = document.getElementById('admin-nav-command');
@@ -183,6 +187,7 @@ async function initializeUserSession(user) {
     if (isAdmin || hasApproverRole) {
         const inboxNav = document.getElementById('nav-approval-inbox');
         if (inboxNav) inboxNav.style.display = '';
+        if (typeof refreshApprovalInboxBadge === 'function') refreshApprovalInboxBadge();
     }
 
     // 5. สารบรรณ / ผู้อำนวยการ: แสดงเฉพาะเมนูที่ใช้งาน (เอกสารรอลงนาม + ข้อมูลส่วนตัว)
@@ -229,6 +234,7 @@ async function initializeUserSession(user) {
                         if (headRole) user._approverRole = headRole;
                         const inboxNav = document.getElementById('nav-approval-inbox');
                         if (inboxNav) inboxNav.style.display = '';
+                        if (typeof refreshApprovalInboxBadge === 'function') refreshApprovalInboxBadge();
                     }
                 }
             } catch (e) {

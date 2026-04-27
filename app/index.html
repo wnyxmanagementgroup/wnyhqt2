@@ -28,8 +28,8 @@
             </div>
             <p id="saving-overlay-message" class="text-base font-semibold text-gray-700 text-center">กำลังบันทึกข้อมูล...</p>
             <p class="text-xs text-gray-400 text-center">กรุณาอย่าปิดหน้าต่างนี้จนกว่าจะเสร็จสิ้น</p>
-        </div>
-    </div>
+	        </div>
+	    </div>
 
     <div id="app" class="max-w-6xl mx-auto">
         <div id="login-screen" class="max-w-6xl mx-auto mt-10 pb-20">
@@ -152,7 +152,7 @@
                         <p class="font-medium">กรณีที่นำนักเรียนไปพักค้างคืนส่งเอกสารเพิ่มเติม:</p> 
                          <span class="font-bold">ปริ้นส่ง 1 ชุด</span>
                         <ul class="list-disc pl-5 mt-1">
-                            <li>หนังสือกำหนดการการเดินทาง(ทำในระบบได้)</li>
+                            <li>หนังสือกำหนดการการเดินทาง</li>
                             <li>หนังสือขออนุญาตผู้ปกครอง</li>
                             <li>แผนที่การเดินทาง (Google map)</li>
                         </ul>
@@ -160,19 +160,18 @@
                 </div>
                 
                 <div class="info-section">
-                    <h3 class="text-lg font-bold text-blue-700 mb-4">2. การขออนุญาตไปราชการ (ไม่เบิกค่าใช้จ่าย)</h3>
+                    <h3 class="text-lg font-bold text-green-700 mb-4">2. การขออนุญาตไปราชการ (ไม่เบิกค่าใช้จ่าย)</h3>
                     <p class="font-medium mb-2">เอกสารที่ต้องเตรียม:</p>
                     <ul class="list-disc pl-5 mb-2">
                         <li>ร่างบันทึกข้อความ กดส่งร่างข้อความในระบบ (อัพโหลดไฟล์ที่เซ็นเสร็จแล้ว)</li>
                         <li>หนังสือราชการต้นเรื่อง</li>
-                        <li>บันทึกแลกคาบสอน</li>
                         <li>บันทึกขออนุญาตวิชาการ (กรณีที่มีนักเรียนไปด้วย)</li>
                     </ul>
                     <div class="info-note">
                         <p class="font-medium">กรณีที่นำนักเรียนไปพักค้างคืนส่งเอกสารเพิ่มเติม:</p> 
                         <span class="font-bold">ปริ้นส่ง 1 ชุด</span>
                         <ul class="list-disc pl-5 mt-1">
-                            <li>หนังสือกำหนดการการเดินทาง(ทำในระบบได้)</li>
+                            <li>หนังสือกำหนดการการเดินทาง</li>
                             <li>หนังสือขออนุญาตผู้ปกครอง</li>
                             <li>แผนที่การเดินทาง (Google map)</li>
                         </ul>
@@ -196,6 +195,7 @@
                 <button data-target="dashboard-page" id="user-nav-dashboard" class="nav-button active">
                     <span class="nav-icon">🏠</span>
                     <span class="nav-label">แดชบอร์ด</span>
+                    <span id="user-completed-badge" class="nav-badge nav-badge--success hidden">0</span>
                 </button>
 
                 <button data-target="form-page" id="user-nav-form" class="nav-button">
@@ -212,6 +212,7 @@
                 <button data-target="send-memo-page" id="nav-send-memo" class="nav-button">
                     <span class="nav-icon">📤</span>
                     <span class="nav-label">ส่งบันทึกข้อความ</span>
+                    <span id="send-memo-badge" class="nav-badge hidden">0</span>
                 </button>
 
                 <button data-target="stats-page" id="nav-stats" class="nav-button">
@@ -1265,14 +1266,61 @@
                                 <button id="admin-email-backup-btn" onclick="adminSendYearlyBackupEmail()" class="btn-sync w-full hidden" style="background:#0891b2;" title="ส่ง Email สำรองข้อมูลพร้อม link ดาวน์โหลดทุกไฟล์">📧 ส่ง Email สำรอง</button>
                             </div>
 
-                            <div class="bg-white border border-emerald-100 rounded-lg p-5 shadow-sm">
-                                <div class="text-sm font-semibold text-emerald-700 mb-2">คลังข้อมูล</div>
-                                <h3 class="text-lg font-bold text-gray-800 mb-2">คลังข้อมูลย้อนหลัง</h3>
-                                <p class="text-sm text-gray-500 mb-4">เปิดหน้า public archive เพื่อตรวจสอบเอกสารย้อนหลัง</p>
-                                <a id="archive-link-btn" href="../archive/" target="_blank" class="btn-sync w-full hidden text-center" style="background:#0f766e;text-decoration:none;display:none;">📚 เปิดคลังข้อมูล</a>
-                            </div>
-                        </div>
-                    </div>
+	                            <div class="bg-white border border-emerald-100 rounded-lg p-5 shadow-sm">
+	                                <div class="text-sm font-semibold text-emerald-700 mb-2">คลังข้อมูล</div>
+	                                <h3 class="text-lg font-bold text-gray-800 mb-2">คลังข้อมูลย้อนหลัง</h3>
+	                                <p class="text-sm text-gray-500 mb-4">เปิดหน้า public archive เพื่อตรวจสอบเอกสารย้อนหลัง</p>
+	                                <a id="archive-link-btn" href="../archive/" target="_blank" class="btn-sync w-full hidden text-center" style="background:#0f766e;text-decoration:none;display:none;">📚 เปิดคลังข้อมูล</a>
+	                            </div>
+
+	                            <div class="bg-white border border-pink-100 rounded-lg p-5 shadow-sm md:col-span-2 xl:col-span-3">
+	                                <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+	                                    <div>
+	                                        <div class="text-sm font-semibold text-pink-700 mb-2">Workflow การส่งบันทึก</div>
+	                                        <h3 class="text-lg font-bold text-gray-800 mb-2">เลือกเวอร์ชันการส่งบันทึกข้อความ</h3>
+	                                        <p class="text-sm text-gray-500 max-w-3xl">กำหนดได้ว่าจะใช้รูปแบบเดิมที่แยกเบิก/ไม่เบิก หรือบังคับให้ทุกคำขออัปโหลดไฟล์ในระบบเหมือนกันทั้งหมด เพื่อให้ผู้ใช้ทำงานตาม flow เดียว</p>
+	                                    </div>
+	                                    <span id="setting-force-memo-upload-status" class="inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">ใช้โหมดเดิม</span>
+	                                </div>
+
+	                                <label class="mt-4 flex items-start gap-3 rounded-xl border border-sky-100 bg-sky-50/70 p-4 cursor-pointer">
+	                                    <input type="checkbox" id="setting-force-memo-upload" class="mt-1 h-4 w-4 rounded border-sky-300 text-sky-600 focus:ring-sky-400">
+	                                    <span class="block">
+	                                        <span class="block text-sm font-semibold text-sky-900">บังคับอัปโหลดไฟล์สำหรับทุกคำขอ</span>
+	                                        <span class="block text-xs text-sky-700 mt-1">เมื่อเปิดใช้งาน ระบบจะซ่อนตัวเลือก “ส่งเอกสารฉบับจริง” และใช้หน้าส่งบันทึกแบบแนบไฟล์/ส่งต่อในระบบทั้งกรณีเบิกและไม่เบิกค่าใช้จ่าย</span>
+	                                    </span>
+	                                </label>
+
+	                                <div class="mt-4 rounded-xl border border-rose-100 bg-rose-50/70 p-4">
+	                                    <div class="text-sm font-semibold text-rose-900 mb-3">เอกสารที่บังคับอัปโหลดในหน้า “ส่งบันทึกข้อความ”</div>
+	                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+	                                        <label class="flex items-start gap-3 rounded-lg border border-white/70 bg-white/80 px-3 py-3 cursor-pointer">
+	                                            <input type="checkbox" id="setting-required-file-ref-doc" class="mt-1 h-4 w-4 rounded border-rose-300 text-rose-500 focus:ring-rose-300">
+	                                            <span class="block">
+	                                                <span class="block text-sm font-medium text-gray-800">หนังสือต้นเรื่อง / หนังสือเชิญ</span>
+	                                                <span class="block text-xs text-gray-500 mt-1">เอกสารอ้างอิงหลักของคำขอ</span>
+	                                            </span>
+	                                        </label>
+
+	                                        <label class="flex items-start gap-3 rounded-lg border border-white/70 bg-white/80 px-3 py-3 cursor-pointer">
+	                                            <input type="checkbox" id="setting-required-file-exchange" class="mt-1 h-4 w-4 rounded border-rose-300 text-rose-500 focus:ring-rose-300">
+	                                            <span class="block">
+	                                                <span class="block text-sm font-medium text-gray-800">ไฟล์แลกคาบสอน</span>
+	                                                <span class="block text-xs text-gray-500 mt-1">ใช้เมื่อมีการแลกคาบหรือจำเป็นต้องแนบประกอบ</span>
+	                                            </span>
+	                                        </label>
+	                                    </div>
+	                                    <p id="setting-required-upload-summary" class="text-xs text-gray-500 mt-3">กำหนดได้ว่าในโหมดอัปโหลดไฟล์ ระบบจะเช็กบังคับเอกสารตัวไหนบ้างก่อนให้ส่งต่อ</p>
+	                                </div>
+
+	                                <p id="setting-force-memo-upload-hint" class="text-xs text-gray-500 mt-3">โหมดปัจจุบันยังคงแยกการส่งบันทึกระหว่างกรณีเบิกกับไม่เบิกค่าใช้จ่าย</p>
+
+	                                <div class="mt-4 flex flex-wrap gap-3">
+	                                    <button id="save-workflow-settings-btn" class="btn-sync" style="background:linear-gradient(135deg,#7dd3fc,#f9a8d4);color:#7c2d92;">💾 บันทึกการตั้งค่า workflow</button>
+	                                </div>
+	                            </div>
+	                        </div>
+	                    </div>
 
 	                <div id="stats-page" class="page-view hidden">
 	                    <h2 class="text-2xl font-bold mb-6">สถิติข้อมูล</h2>
@@ -1755,7 +1803,9 @@
         <p class="text-xs text-gray-500 mt-1">ระบบจะรวมบันทึกนี้กับไฟล์แนบที่คุณเพิ่มโดยอัตโนมัติ</p>
     </div>
 
-    <div class="mb-4 bg-gray-50 p-3 rounded border">
+    <div id="memo-workflow-mode-banner" class="hidden mb-4 p-3 rounded-lg border border-sky-200 bg-sky-50 text-sky-800 text-sm font-semibold"></div>
+
+    <div id="modal-memo-type-container" class="mb-4 bg-gray-50 p-3 rounded border">
         <label class="form-label font-bold text-gray-700">ประเภทการดำเนินการ</label>
         <div class="space-y-2 mt-2">
             <div class="flex items-center">
@@ -1800,14 +1850,15 @@
         </div>
 
         <div>
-            <label class="form-label text-sm text-gray-600">1. ไฟล์แลกคาบสอน (PDF) <span class="text-gray-400 font-normal">(ถ้ามี)</span></label>
+            <label id="file-exchange-label" class="form-label text-sm text-gray-600">1. ไฟล์แลกคาบสอน (PDF) <span class="text-gray-400 font-normal">(ถ้ามี)</span></label>
             <input type="file" id="file-exchange" class="form-input text-sm" accept=".pdf,.jpg,.png,.jpeg">
         </div>
 
         <div>
-            <label class="form-label text-sm text-red-600 font-bold">* 2. หนังสือต้นเรื่อง/หนังสือเชิญ (PDF)</label>
+            <label id="file-ref-doc-label" class="form-label text-sm text-red-600 font-bold">* 2. หนังสือต้นเรื่อง/หนังสือเชิญ (PDF)</label>
             <input type="file" id="file-ref-doc" class="form-input text-sm" accept=".pdf,.jpg,.png,.jpeg">
         </div>
+        <p id="memo-upload-requirements-summary" class="text-xs text-gray-500 mt-1"></p>
     </div>
     
     <div class="flex justify-end gap-4 mt-6">

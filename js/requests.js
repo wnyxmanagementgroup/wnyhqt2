@@ -426,6 +426,10 @@ function renderUserRequests(requests) {
 
     if (!container) return;
 
+    if (typeof renderNotificationUI === 'function' && typeof buildUserRequestBadgeSummary === 'function') {
+        renderNotificationUI(buildUserRequestBadgeSummary(requests || []));
+    }
+
     if (!requests || requests.length === 0) {
         container.innerHTML = '';
         if (tableWrapper) tableWrapper.classList.add('hidden');
@@ -2892,11 +2896,17 @@ window.openSendMemoFromList = function(requestId, departmentName = null) {
     window._memoUploadOrder = {};
     window._memoAutoBase64  = null;
 
+    const forceUploadMode = typeof isUnifiedMemoUploadEnabled === 'function' && isUnifiedMemoUploadEnabled();
+
     // ตั้งค่าประเภทอัตโนมัติเป็น ไม่เบิก
     const nonReimburseRadio = document.getElementById('memo_type_non_reimburse');
-    if(nonReimburseRadio) {
+    if (nonReimburseRadio) {
         nonReimburseRadio.checked = true;
+    }
+    if (!forceUploadMode && nonReimburseRadio) {
         nonReimburseRadio.dispatchEvent(new Event('change'));
+    } else if (typeof applyMemoWorkflowModeUI === 'function') {
+        applyMemoWorkflowModeUI();
     }
 
     // เลือกแผนกที่จะส่งต่อให้อัตโนมัติ (ถ้ามีส่งมา)
@@ -2951,11 +2961,17 @@ window.openSendMemoWithPreSignedDoc = function(requestId, signedUrl, departmentN
         }).catch(() => { window._memoAutoBase64 = null; });
     }
 
+    const forceUploadMode = typeof isUnifiedMemoUploadEnabled === 'function' && isUnifiedMemoUploadEnabled();
+
     // ตั้งค่าประเภทอัตโนมัติเป็น ไม่เบิก
     const nonReimburseRadio = document.getElementById('memo_type_non_reimburse');
     if (nonReimburseRadio) {
         nonReimburseRadio.checked = true;
+    }
+    if (!forceUploadMode && nonReimburseRadio) {
         nonReimburseRadio.dispatchEvent(new Event('change'));
+    } else if (typeof applyMemoWorkflowModeUI === 'function') {
+        applyMemoWorkflowModeUI();
     }
 
     // แนบ URL เอกสารที่ลงนามแล้ว (pre-signed)
@@ -2991,7 +3007,10 @@ async function handleMemoSubmitFromModal(e) {
 
     const isAdmin      = user.role === 'admin';
     const requestId    = document.getElementById('memo-modal-request-id').value;
-    const memoType     = document.querySelector('input[name="modal_memo_type"]:checked')?.value || 'non_reimburse';
+    const forceUploadMode = typeof isUnifiedMemoUploadEnabled === 'function' && isUnifiedMemoUploadEnabled();
+    const memoType     = forceUploadMode
+        ? 'non_reimburse'
+        : (document.querySelector('input[name="modal_memo_type"]:checked')?.value || 'non_reimburse');
     const preSignedUrl = document.getElementById('pre-signed-memo-url')?.value || '';
 
     const forwardToStatus = memoType === 'reimburse'
@@ -3010,6 +3029,10 @@ async function handleMemoSubmitFromModal(e) {
         let finalFileUrlForAdmin = '';
 
         if (memoType === 'non_reimburse') {
+            const requiredMemoUploads = (typeof getRequiredMemoUploadSettings === 'function')
+                ? getRequiredMemoUploadSettings()
+                : { refDoc: true, exchange: false };
+
             // ── 1. รับบันทึกข้อความหลัก ──
             // แหล่ง A: _memoAutoBase64 (cache จาก Firestore — เร็วที่สุด)
             // แหล่ง B: fetch จาก preSignedUrl (Firebase Storage — ต้อง CORS)
@@ -3047,8 +3070,11 @@ async function handleMemoSubmitFromModal(e) {
             const fileExchange = document.getElementById('file-exchange')?.files[0];
             const fileRefDoc   = document.getElementById('file-ref-doc')?.files[0];
 
-            if (!isAdmin && !fileRefDoc) {
-                throw new Error('กรุณาแนบหนังสือต้นเรื่อง/หนังสือเชิญ (บังคับ)');
+            if (!isAdmin && requiredMemoUploads.refDoc && !fileRefDoc) {
+                throw new Error('กรุณาแนบหนังสือต้นเรื่อง/หนังสือเชิญ');
+            }
+            if (!isAdmin && requiredMemoUploads.exchange && !fileExchange) {
+                throw new Error('กรุณาแนบไฟล์แลกคาบสอน');
             }
 
             const extraFiles = [

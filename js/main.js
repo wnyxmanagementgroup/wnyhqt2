@@ -1,6 +1,21 @@
 // --- PAGE NAVIGATION & EVENT LISTENERS ---
 
 let notificationUnsubscribe = null;
+let notificationFallbackUsed = false;
+const WORKFLOW_SETTINGS_CACHE_KEY = 'wny_workflow_settings_cache_v1';
+const DEFAULT_WORKFLOW_SETTINGS = {
+    forceMemoUploadForAll: false,
+    requiredMemoUploads: {
+        refDoc: true,
+        exchange: false
+    }
+};
+window.systemWorkflowSettings = window.systemWorkflowSettings || normalizeWorkflowSettings(readCachedWorkflowSettings());
+window.lastPersistedWorkflowSettings = window.lastPersistedWorkflowSettings || normalizeWorkflowSettings(readCachedWorkflowSettings());
+window.systemWorkflowSettingsMeta = window.systemWorkflowSettingsMeta || {
+    source: 'cache',
+    warningMessage: ''
+};
 
 // ★ ติดตามลำดับการอัพโหลดของ send-memo modal (timestamp ของแต่ละ input)
 window._memoUploadOrder = {};
@@ -101,6 +116,9 @@ async function switchPage(targetPageId) {
         if (typeof loadPendingApprovals === 'function') {
             loadPendingApprovals();
         }
+    }
+    if (targetPageId === 'admin-system-settings-page') {
+        if (typeof loadSystemWorkflowSettings === 'function') loadSystemWorkflowSettings();
     }
     if (targetPageId === 'admin-heads-page') {
         // admin-heads-page ถูกรวมเข้า admin-users-page tab แล้ว — redirect ไปหน้านั้นแทน
@@ -226,6 +244,7 @@ function startRealtimeNotifications() {
     if (notificationUnsubscribe) {
         notificationUnsubscribe();
     }
+    notificationFallbackUsed = false;
 
     console.log("🔔 Starting Real-time Notification Listener...");
 
@@ -233,50 +252,147 @@ function startRealtimeNotifications() {
     notificationUnsubscribe = db.collection('requests')
         .where('username', '==', user.username)
         .onSnapshot((snapshot) => {
-            let pendingCount = 0;
-            let pendingItems = [];
+            const requests = [];
 
             // วนลูปเช็คเอกสารทุกตัวที่มีการเปลี่ยนแปลง
             snapshot.forEach((doc) => {
-                const req = doc.data();
-                const reqId = req.requestId || req.id;
-                
-                // Logic เดียวกับ updateNotifications เดิม
-                const hasCreated = (req.pdfUrl && req.pdfUrl !== '') || req.completedMemoUrl;
-                
-                // ตรวจสอบสถานะว่าเสร็จสิ้นหรือยัง
-                const isCompleted = (req.status === 'เสร็จสิ้น' || req.status === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน' || req.memoStatus === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน');
-                // isFixing: ตรวจทั้ง status (ใหม่) และ wasRejected (fallback สำหรับ doc เก่า)
-                const isFixing = (req.status === 'นำกลับไปแก้ไข' || req.memoStatus === 'นำกลับไปแก้ไข'
-                    || (req.wasRejected === true && req.status !== 'เสร็จสิ้น' && req.status !== 'เสร็จสิ้น/รับไฟล์ไปใช้งาน'));
-                
-                // ถ้าสร้างไฟล์แล้ว แต่ยังไม่เสร็จ หรือต้องแก้ไข -> นับเป็น pending
-                if (hasCreated && (!isCompleted || isFixing)) {
-                    pendingCount++;
-                    pendingItems.push({
-                        id: reqId,
-                        purpose: req.purpose,
-                        startDate: req.startDate,
-                        isFix: isFixing
-                    });
-                }
+                requests.push({ id: doc.id, ...doc.data() });
             });
 
             // อัปเดต UI ทันที
-            renderNotificationUI(pendingCount, pendingItems);
+            renderNotificationUI(buildUserRequestBadgeSummary(requests));
         }, (error) => {
+            const message = String(error?.message || error || '');
+            if (/Missing or insufficient permissions/i.test(message)) {
+                if (!notificationFallbackUsed && typeof fetchUserRequests === 'function') {
+                    notificationFallbackUsed = true;
+                    fetchUserRequests(true).catch((fallbackError) => {
+                        console.warn('Notification fallback fetch error:', fallbackError);
+                    });
+                }
+                return;
+            }
             console.warn("Real-time Notification Error:", error);
         });
+
+    refreshApprovalInboxBadge();
 }
 
 // เก็บรายการค้างส่งไว้ให้ openPendingMemoList() เข้าถึงได้
 let _pendingMemoItems = [];
 
-function renderNotificationUI(count, items) {
-    _pendingMemoItems = items;
+function setNavBadgeState(badgeId, count, tone = 'danger') {
+    const badge = document.getElementById(badgeId);
+    if (!badge) return;
+
+    const safeCount = Math.max(0, Number(count) || 0);
+    if (safeCount <= 0) {
+        badge.textContent = '0';
+        badge.classList.add('hidden');
+        return;
+    }
+
+    badge.textContent = safeCount > 99 ? '99+' : String(safeCount);
+    badge.classList.remove('hidden');
+
+    if (badge.classList.contains('nav-badge')) {
+        badge.classList.remove('nav-badge--danger', 'nav-badge--success');
+        badge.classList.add(tone === 'success' ? 'nav-badge--success' : 'nav-badge--danger');
+    }
+}
+
+function buildUserRequestBadgeSummary(requests = []) {
+    const pendingMemoItems = [];
+    let completedReadyCount = 0;
+
+    requests.forEach((req = {}) => {
+        const reqId = req.requestId || req.id || '';
+        const draftMemoUrl = req.fileUrl || req.pdfUrl || req.memoPdfUrl || req.currentPdfUrl || '';
+        const completedMemoUrl = req.completedMemoUrl || '';
+        const adminMemoUrl = req.adminMemoUrl || '';
+        const status = String(req.status || '');
+        const memoStatus = String(req.memoStatus || '');
+
+        const isReadyToUse = status === 'เสร็จสิ้น/รับไฟล์ไปใช้งาน'
+            || (!!adminMemoUrl && status === 'เสร็จสิ้น');
+        const isFixing = status === 'นำกลับไปแก้ไข'
+            || memoStatus === 'นำกลับไปแก้ไข'
+            || (req.wasRejected === true
+                && status !== 'เสร็จสิ้น'
+                && status !== 'เสร็จสิ้น/รับไฟล์ไปใช้งาน');
+        const isSubmitted = status === 'Submitted';
+        const isFinalStatus = isReadyToUse || status === 'ไม่อนุมัติ' || status === 'ยกเลิก';
+        const needsToSend = (draftMemoUrl && !completedMemoUrl && !isSubmitted && !isFinalStatus) || isFixing;
+
+        if (needsToSend) {
+            pendingMemoItems.push({
+                id: reqId,
+                purpose: req.purpose,
+                startDate: req.startDate,
+                isFix: isFixing
+            });
+        }
+
+        if (isReadyToUse) {
+            completedReadyCount++;
+        }
+    });
+
+    return {
+        pendingMemoCount: pendingMemoItems.length,
+        pendingMemoItems,
+        completedReadyCount
+    };
+}
+
+async function refreshApprovalInboxBadge() {
+    const user = getCurrentUser();
+    const badge = document.getElementById('approval-badge');
+    if (!badge) return;
+
+    const targetStatus = user ? getTargetStatusForUser(user._approverRole || user.role) : '';
+    if (!user || !targetStatus) {
+        badge.classList.add('hidden');
+        return;
+    }
+
+    try {
+        let count = 0;
+        if (typeof db !== 'undefined' && db) {
+            try {
+                const snapshot = await db.collection('requests')
+                    .where('docStatus', '==', targetStatus)
+                    .get();
+                count = snapshot.size;
+            } catch (firestoreError) {
+                const message = String(firestoreError?.message || firestoreError || '');
+                if (!/Missing or insufficient permissions/i.test(message)) throw firestoreError;
+                const docs = await getApprovalDocsFallback(targetStatus);
+                count = docs.length;
+            }
+        } else {
+            const docs = await getApprovalDocsFallback(targetStatus);
+            count = docs.length;
+        }
+        setNavBadgeState('approval-badge', count, 'danger');
+    } catch (error) {
+        console.warn('refreshApprovalInboxBadge error:', error);
+    }
+}
+
+function renderNotificationUI(summary = {}) {
+    const {
+        pendingMemoCount = 0,
+        pendingMemoItems = [],
+        completedReadyCount = 0
+    } = summary;
+
+    _pendingMemoItems = pendingMemoItems;
+    setNavBadgeState('send-memo-badge', pendingMemoCount, 'danger');
+    setNavBadgeState('user-completed-badge', completedReadyCount, 'success');
 
     // ★ แทนที่ปุ่มแจ้งเตือน → ตรวจ isFixing แล้วเปิด send modal อัตโนมัติที่ dashboard
-    const fixingItems = items.filter(item => item.isFix);
+    const fixingItems = pendingMemoItems.filter(item => item.isFix);
     if (fixingItems.length === 0) return;
 
     // ★ รีเฟรช dashboard เสมอเมื่อมีรายการ isFixing (ไม่ถูก block โดย sessionStorage)
@@ -304,6 +420,280 @@ function renderNotificationUI(count, items) {
                 }, 400);
             });
         });
+    }
+}
+
+function getSystemWorkflowSettings() {
+    if (!window.systemWorkflowSettings || typeof window.systemWorkflowSettings !== 'object') {
+        window.systemWorkflowSettings = normalizeWorkflowSettings(readCachedWorkflowSettings());
+    }
+    return window.systemWorkflowSettings;
+}
+
+function getSystemWorkflowSettingsMeta() {
+    if (!window.systemWorkflowSettingsMeta || typeof window.systemWorkflowSettingsMeta !== 'object') {
+        window.systemWorkflowSettingsMeta = { source: 'cache', warningMessage: '' };
+    }
+    return window.systemWorkflowSettingsMeta;
+}
+
+function normalizeWorkflowSettings(source = {}) {
+    const rawRequired = source.requiredMemoUploads || {};
+    return {
+        forceMemoUploadForAll: !!source.forceMemoUploadForAll,
+        requiredMemoUploads: {
+            refDoc: rawRequired.refDoc !== false,
+            exchange: !!rawRequired.exchange
+        }
+    };
+}
+
+function readCachedWorkflowSettings() {
+    try {
+        const raw = localStorage.getItem(WORKFLOW_SETTINGS_CACHE_KEY);
+        return raw ? JSON.parse(raw) : DEFAULT_WORKFLOW_SETTINGS;
+    } catch (error) {
+        console.warn('readCachedWorkflowSettings error:', error);
+        return DEFAULT_WORKFLOW_SETTINGS;
+    }
+}
+
+function cacheWorkflowSettings(settings) {
+    try {
+        localStorage.setItem(WORKFLOW_SETTINGS_CACHE_KEY, JSON.stringify(normalizeWorkflowSettings(settings)));
+    } catch (error) {
+        console.warn('cacheWorkflowSettings error:', error);
+    }
+}
+
+function isUnifiedMemoUploadEnabled() {
+    return !!getSystemWorkflowSettings().forceMemoUploadForAll;
+}
+
+function getRequiredMemoUploadSettings() {
+    const settings = getSystemWorkflowSettings();
+    const requiredMemoUploads = settings.requiredMemoUploads || {};
+    return {
+        refDoc: requiredMemoUploads.refDoc !== false,
+        exchange: !!requiredMemoUploads.exchange
+    };
+}
+
+function updateSystemWorkflowSettingsPreview(forceEnabled = isUnifiedMemoUploadEnabled()) {
+    const statusEl = document.getElementById('setting-force-memo-upload-status');
+    const hintEl = document.getElementById('setting-force-memo-upload-hint');
+    const checkbox = document.getElementById('setting-force-memo-upload');
+    const requiredRefDocCheckbox = document.getElementById('setting-required-file-ref-doc');
+    const requiredExchangeCheckbox = document.getElementById('setting-required-file-exchange');
+    const requiredSummaryEl = document.getElementById('setting-required-upload-summary');
+    const requiredDocs = getRequiredMemoUploadSettings();
+
+    if (checkbox) checkbox.checked = !!forceEnabled;
+    if (requiredRefDocCheckbox) requiredRefDocCheckbox.checked = !!requiredDocs.refDoc;
+    if (requiredExchangeCheckbox) requiredExchangeCheckbox.checked = !!requiredDocs.exchange;
+
+    if (statusEl) {
+        statusEl.textContent = forceEnabled ? 'บังคับอัปโหลดทุกกรณี' : 'ใช้โหมดเดิม';
+        statusEl.className = forceEnabled
+            ? 'inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 border border-emerald-200'
+            : 'inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200';
+    }
+
+    if (hintEl) {
+        const baseHint = forceEnabled
+            ? 'ขณะนี้ทุกคำขอจะใช้หน้าส่งบันทึกแบบแนบไฟล์/ส่งต่อในระบบเหมือนกันทั้งหมด'
+            : 'โหมดปัจจุบันยังคงแยกการส่งบันทึกระหว่างกรณีเบิกกับไม่เบิกค่าใช้จ่าย';
+        const warning = getSystemWorkflowSettingsMeta().warningMessage;
+        hintEl.textContent = warning ? `${baseHint} | ${warning}` : baseHint;
+    }
+
+    if (requiredSummaryEl) {
+        const requiredLabels = [];
+        if (requiredDocs.refDoc) requiredLabels.push('หนังสือต้นเรื่อง/หนังสือเชิญ');
+        if (requiredDocs.exchange) requiredLabels.push('ไฟล์แลกคาบสอน');
+        requiredSummaryEl.textContent = requiredLabels.length > 0
+            ? `เอกสารที่ระบบจะบังคับในโหมดอัปโหลด: ${requiredLabels.join(' และ ')}`
+            : 'ตอนนี้ไม่มีเอกสารใดถูกบังคับ ระบบจะให้แนบได้ตามความจำเป็น';
+    }
+}
+
+function applyMemoUploadRequirementLabels() {
+    const requiredDocs = getRequiredMemoUploadSettings();
+    const exchangeLabel = document.getElementById('file-exchange-label');
+    const refDocLabel = document.getElementById('file-ref-doc-label');
+    const summary = document.getElementById('memo-upload-requirements-summary');
+
+    if (exchangeLabel) {
+        exchangeLabel.className = requiredDocs.exchange
+            ? 'form-label text-sm text-red-600 font-bold'
+            : 'form-label text-sm text-gray-600';
+        exchangeLabel.innerHTML = requiredDocs.exchange
+            ? '* 1. ไฟล์แลกคาบสอน (PDF)'
+            : '1. ไฟล์แลกคาบสอน (PDF) <span class="text-gray-400 font-normal">(ถ้ามี)</span>';
+    }
+
+    if (refDocLabel) {
+        refDocLabel.className = requiredDocs.refDoc
+            ? 'form-label text-sm text-red-600 font-bold'
+            : 'form-label text-sm text-gray-600';
+        refDocLabel.innerHTML = requiredDocs.refDoc
+            ? '* 2. หนังสือต้นเรื่อง/หนังสือเชิญ (PDF)'
+            : '2. หนังสือต้นเรื่อง/หนังสือเชิญ (PDF) <span class="text-gray-400 font-normal">(ถ้ามี)</span>';
+    }
+
+    if (summary) {
+        const forced = [];
+        if (requiredDocs.refDoc) forced.push('หนังสือต้นเรื่อง/หนังสือเชิญ');
+        if (requiredDocs.exchange) forced.push('ไฟล์แลกคาบสอน');
+        const baseSummary = forced.length > 0
+            ? `เอกสารบังคับก่อนส่งต่อ: ${forced.join(' และ ')}`
+            : 'เอกสารแนบทั้งหมดเป็นแบบไม่บังคับในโหมดนี้';
+        const warning = getSystemWorkflowSettingsMeta().warningMessage;
+        summary.textContent = warning ? `${baseSummary} | ${warning}` : baseSummary;
+    }
+}
+
+function applyMemoWorkflowModeUI() {
+    const forceUploadMode = isUnifiedMemoUploadEnabled();
+    const memoTypeContainer = document.getElementById('modal-memo-type-container');
+    const banner = document.getElementById('memo-workflow-mode-banner');
+    const reimburseRadio = document.getElementById('memo_type_reimburse');
+    const nonReimburseRadio = document.getElementById('memo_type_non_reimburse');
+
+    if (memoTypeContainer) memoTypeContainer.classList.toggle('hidden', forceUploadMode);
+    if (banner) {
+        banner.classList.toggle('hidden', !forceUploadMode);
+        banner.textContent = forceUploadMode
+            ? 'เปิดโหมดบังคับอัปโหลดไฟล์: ทุกคำขอจะใช้การส่งบันทึกแบบแนบไฟล์ในระบบเหมือนกันทั้งหมด'
+            : '';
+    }
+
+    if (reimburseRadio) {
+        reimburseRadio.disabled = forceUploadMode;
+        if (forceUploadMode) reimburseRadio.checked = false;
+    }
+    if (nonReimburseRadio && forceUploadMode) {
+        nonReimburseRadio.checked = true;
+    }
+
+    const selectedType = forceUploadMode
+        ? 'non_reimburse'
+        : (document.querySelector('input[name="modal_memo_type"]:checked')?.value || 'non_reimburse');
+    const isUploadMode = selectedType !== 'reimburse';
+    const requiredDocs = getRequiredMemoUploadSettings();
+
+    const nonReimburseContainer = document.getElementById('modal-non-reimburse-files');
+    const fileExchange = document.getElementById('file-exchange');
+    const fileRefDoc = document.getElementById('file-ref-doc');
+    if (nonReimburseContainer) {
+        nonReimburseContainer.classList.toggle('hidden', !isUploadMode);
+    }
+    if (fileExchange) fileExchange.required = isUploadMode && !!requiredDocs.exchange;
+    if (fileRefDoc) fileRefDoc.required = isUploadMode && !!requiredDocs.refDoc;
+
+    const forwardContainer = document.getElementById('modal-forward-to-container');
+    const forwardSelect = document.getElementById('modal-forward-to');
+    if (forwardContainer) forwardContainer.classList.toggle('hidden', !isUploadMode);
+    if (forwardSelect) forwardSelect.required = isUploadMode;
+
+    const singleFileContainer = document.getElementById('modal-single-file-container');
+    const oldFileContainer = document.getElementById('modal-memo-file-container');
+    if (singleFileContainer) singleFileContainer.classList.add('hidden');
+    if (oldFileContainer) oldFileContainer.classList.add('hidden');
+
+    applyMemoUploadRequirementLabels();
+    updateSystemWorkflowSettingsPreview(forceUploadMode);
+}
+
+async function loadSystemWorkflowSettings() {
+    const cachedSettings = normalizeWorkflowSettings(readCachedWorkflowSettings());
+    window.systemWorkflowSettings = normalizeWorkflowSettings(getSystemWorkflowSettings());
+    window.lastPersistedWorkflowSettings = cachedSettings;
+    const meta = getSystemWorkflowSettingsMeta();
+    meta.warningMessage = '';
+    meta.source = 'cache';
+
+    if (typeof db !== 'undefined' && db) {
+        try {
+            const snap = await db.collection('systemConfig').doc('workflowSettings').get();
+            if (snap.exists) {
+                const remoteSettings = normalizeWorkflowSettings(snap.data() || {});
+                window.systemWorkflowSettings = remoteSettings;
+                window.lastPersistedWorkflowSettings = remoteSettings;
+                cacheWorkflowSettings(remoteSettings);
+                meta.source = 'remote';
+            } else {
+                window.systemWorkflowSettings = cachedSettings;
+                meta.warningMessage = 'ยังไม่พบการตั้งค่ากลาง จึงใช้ค่าล่าสุดที่เก็บไว้ในเครื่อง';
+            }
+        } catch (error) {
+            console.warn('loadSystemWorkflowSettings error:', error);
+            window.systemWorkflowSettings = cachedSettings;
+            meta.warningMessage = 'ไม่สามารถโหลดการตั้งค่ากลางได้ จึงใช้ค่าล่าสุดที่เก็บไว้ในเครื่อง';
+        }
+    } else {
+        window.systemWorkflowSettings = cachedSettings;
+        meta.warningMessage = 'ไม่พบการเชื่อมต่อฐานข้อมูล จึงใช้ค่าล่าสุดที่เก็บไว้ในเครื่อง';
+    }
+
+    applyMemoWorkflowModeUI();
+    return getSystemWorkflowSettings();
+}
+
+async function saveSystemWorkflowSettings() {
+    const checkbox = document.getElementById('setting-force-memo-upload');
+    const requiredRefDocCheckbox = document.getElementById('setting-required-file-ref-doc');
+    const requiredExchangeCheckbox = document.getElementById('setting-required-file-exchange');
+    const btn = document.getElementById('save-workflow-settings-btn');
+    const forceMemoUploadForAll = !!checkbox?.checked;
+    const requiredMemoUploads = {
+        refDoc: !!requiredRefDocCheckbox?.checked,
+        exchange: !!requiredExchangeCheckbox?.checked
+    };
+
+    if (!checkbox) return;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ กำลังบันทึก...';
+    }
+
+    const nextSettings = normalizeWorkflowSettings({
+        forceMemoUploadForAll,
+        requiredMemoUploads
+    });
+    const previousPersistedSettings = normalizeWorkflowSettings(window.lastPersistedWorkflowSettings || readCachedWorkflowSettings());
+    const meta = getSystemWorkflowSettingsMeta();
+
+    try {
+        if (typeof db !== 'undefined' && db) {
+            await db.collection('systemConfig').doc('workflowSettings').set({
+                ...nextSettings,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedBy: getCurrentUser()?.username || ''
+            }, { merge: true });
+        }
+
+        window.systemWorkflowSettings = nextSettings;
+        window.lastPersistedWorkflowSettings = nextSettings;
+        cacheWorkflowSettings(nextSettings);
+        meta.warningMessage = '';
+        meta.source = 'remote';
+        applyMemoWorkflowModeUI();
+        showAlert('สำเร็จ', forceMemoUploadForAll
+            ? 'เปิดโหมดบังคับอัปโหลดไฟล์สำหรับทุกคำขอเรียบร้อยแล้ว'
+            : 'เปลี่ยนกลับไปใช้โหมดส่งบันทึกแบบเดิมเรียบร้อยแล้ว');
+    } catch (error) {
+        window.systemWorkflowSettings = previousPersistedSettings;
+        window.lastPersistedWorkflowSettings = previousPersistedSettings;
+        meta.warningMessage = 'บันทึกค่าไม่สำเร็จ ระบบกลับไปใช้ค่าล่าสุดที่บันทึกไว้แล้ว';
+        applyMemoWorkflowModeUI();
+        console.error('saveSystemWorkflowSettings error:', error);
+        showAlert('ผิดพลาด', 'ไม่สามารถบันทึกการตั้งค่า workflow ได้: ' + error.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '💾 บันทึกการตั้งค่า workflow';
+        }
     }
 }
 
@@ -523,41 +913,40 @@ document.getElementById('edit-user-cancel')?.addEventListener('click', () => { d
     
     document.querySelectorAll('input[name="expense_option"]').forEach(radio => radio.addEventListener('change', toggleExpenseOptions));
     
-    // --- โค้ดใหม่ (ใช้ ID ที่ถูกต้อง) ---
-document.querySelectorAll('input[name="modal_memo_type"]').forEach(radio => radio.addEventListener('change', (e) => {
-    const isReimburse = e.target.value === 'reimburse';
-
-    // 1. จัดการกล่องอัปโหลด 3 ไฟล์ (สำหรับแบบไม่เบิก)
-    const nonReimburseContainer = document.getElementById('modal-non-reimburse-files');
-    if (nonReimburseContainer) {
-        if (isReimburse) {
-            nonReimburseContainer.classList.add('hidden');
-            // ปลดล็อค required (ไม่ต้องกรอก)
-            const f1 = document.getElementById('file-exchange');
-            const f2 = document.getElementById('file-ref-doc');
-            if(f1) f1.required = false;
-            if(f2) f2.required = false;
-        } else {
-            nonReimburseContainer.classList.remove('hidden');
-            // ใบแลกคาบไม่บังคับ, หนังสือต้นเรื่องบังคับ
-            const f2 = document.getElementById('file-ref-doc');
-            if(f2) f2.required = true;
-        }
-    }
-
-    // 2. จัดการกล่องส่งต่อ (ซ่อนเมื่อเบิก — ไม่ต้องส่งต่อ)
-    const forwardContainer = document.getElementById('modal-forward-to-container');
-    const forwardSelect    = document.getElementById('modal-forward-to');
-    if (forwardContainer) forwardContainer.classList.toggle('hidden', isReimburse);
-    if (forwardSelect)    forwardSelect.required = !isReimburse;
-
-    // 3. จัดการกล่องไฟล์เดียว (Legacy - เผื่อยังมีอยู่ใน HTML)
-    const singleFileContainer = document.getElementById('modal-single-file-container');
-    const oldFileContainer = document.getElementById('modal-memo-file-container'); // เผื่อยังมี ID เก่าหลงเหลือ
-
-    if (singleFileContainer) singleFileContainer.classList.add('hidden');
-    if (oldFileContainer) oldFileContainer.classList.add('hidden');
-}));
+    document.querySelectorAll('input[name="modal_memo_type"]').forEach(radio =>
+        radio.addEventListener('change', () => applyMemoWorkflowModeUI())
+    );
+    document.getElementById('setting-force-memo-upload')?.addEventListener('change', (e) => {
+        updateSystemWorkflowSettingsPreview(!!e.target.checked);
+    });
+    document.getElementById('setting-required-file-ref-doc')?.addEventListener('change', () => {
+        const nextSettings = {
+            ...getSystemWorkflowSettings(),
+            requiredMemoUploads: {
+                ...getRequiredMemoUploadSettings(),
+                refDoc: !!document.getElementById('setting-required-file-ref-doc')?.checked,
+                exchange: !!document.getElementById('setting-required-file-exchange')?.checked
+            }
+        };
+        window.systemWorkflowSettings = nextSettings;
+        applyMemoUploadRequirementLabels();
+        updateSystemWorkflowSettingsPreview();
+    });
+    document.getElementById('setting-required-file-exchange')?.addEventListener('change', () => {
+        const nextSettings = {
+            ...getSystemWorkflowSettings(),
+            requiredMemoUploads: {
+                ...getRequiredMemoUploadSettings(),
+                refDoc: !!document.getElementById('setting-required-file-ref-doc')?.checked,
+                exchange: !!document.getElementById('setting-required-file-exchange')?.checked
+            }
+        };
+        window.systemWorkflowSettings = nextSettings;
+        applyMemoUploadRequirementLabels();
+        updateSystemWorkflowSettingsPreview();
+    });
+    document.getElementById('save-workflow-settings-btn')?.addEventListener('click', saveSystemWorkflowSettings);
+    applyMemoWorkflowModeUI();
     
     document.querySelectorAll('input[name="vehicle_option"]').forEach(checkbox => {checkbox.addEventListener('change', toggleVehicleDetails);});
     
@@ -835,7 +1224,7 @@ async function checkPDFServerStatus() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     console.log('App Initializing...');
     setupYearSelectors();
     // Check Config
@@ -872,7 +1261,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     } else {
         const user = getCurrentUser();
-        if (user) { initializeUserSession(user); } else { showLoginScreen(); }
+        if (user) { await initializeUserSession(user); } else { showLoginScreen(); }
     }
 });
 // ฟังก์ชันสร้างตัวเลือกปี (ย้อนหลัง 3 ปี)

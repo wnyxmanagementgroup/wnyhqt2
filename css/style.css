@@ -547,14 +547,25 @@ div#requests-list > div:hover, div#admin-requests-list > div:hover {
 }
 .nav-badge {
     margin-left: auto;
-    background: rgba(244, 114, 182, 0.86);
-    color: #831843;
+    background: rgba(248, 113, 113, 0.16);
+    color: #b91c1c;
+    border: 1px solid rgba(248, 113, 113, 0.24);
     font-size: 0.62rem;
     font-weight: 700;
     padding: 1px 6px;
     border-radius: 9999px;
     flex-shrink: 0;
     transition: opacity var(--sb-transition);
+}
+.nav-badge--danger {
+    background: rgba(248, 113, 113, 0.16);
+    color: #b91c1c;
+    border-color: rgba(248, 113, 113, 0.24);
+}
+.nav-badge--success {
+    background: rgba(74, 222, 128, 0.18);
+    color: #15803d;
+    border-color: rgba(74, 222, 128, 0.26);
 }
 .sidebar.collapsed .nav-badge {
     opacity: 0;
