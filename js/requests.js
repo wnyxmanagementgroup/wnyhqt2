@@ -129,6 +129,7 @@ function parseTravelScheduleData(value) {
     return {
         requesterTel: value.requesterTel || value.requester_tel || '',
         driverName: value.driverName || value.driver_name || '',
+        signatureBase64: value.signatureBase64 || '',
         itinerary: Array.isArray(value.itinerary) ? value.itinerary : []
     };
 }

@@ -2939,6 +2939,9 @@ function openDispatchBookModal(requestId) {
 // เงื่อนไขการแสดงปุ่ม: จังหวัด ≠ สระแก้ว + ค้างคืน (endDate > startDate) + มีนักเรียนใน attendees
 // ─────────────────────────────────────────────────────────────────────────────
 
+let travelScheduleSignaturePad = null;
+window._travelScheduleSavedSignatureBase64 = '';
+
 // Helper: แปลงวันที่เป็นภาษาไทย (พ.ศ.)
 function _tsTH(dateStr) {
     const thaiMonths = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
@@ -2987,6 +2990,7 @@ function openTravelScheduleModal(req) {
     const savedSchedule = (typeof parseTravelScheduleData === 'function')
         ? parseTravelScheduleData(req.travelSchedule)
         : (req.travelSchedule || { requesterTel: '', driverName: '', itinerary: [] });
+    window._travelScheduleSavedSignatureBase64 = savedSchedule.signatureBase64 || req.signatureBase64 || '';
     const savedItinerary = {};
     (savedSchedule.itinerary || []).forEach(item => {
         if (item.date) savedItinerary[item.date] = item.detail || '';
@@ -3035,6 +3039,7 @@ function openTravelScheduleModal(req) {
 
     const modal = document.getElementById('travel-schedule-modal');
     modal.style.display = 'flex';
+    setTimeout(() => initTravelScheduleSignaturePad(window._travelScheduleSavedSignatureBase64), 120);
 }
 
 // ปิด Modal
@@ -3042,6 +3047,39 @@ function closeTravelScheduleModal() {
     const modal = document.getElementById('travel-schedule-modal');
     if (modal) modal.style.display = 'none';
     window._travelScheduleReq = null;
+}
+
+function initTravelScheduleSignaturePad(signatureBase64 = '') {
+    const canvas = document.getElementById('ts-signature-canvas');
+    if (!canvas || typeof SignaturePad === 'undefined') return;
+
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width || canvas.offsetWidth || 280;
+    const height = rect.height || canvas.offsetHeight || 154;
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+    travelScheduleSignaturePad = new SignaturePad(canvas, {
+        penColor: 'blue',
+        minWidth: 1,
+        maxWidth: 2.4
+    });
+
+    if (signatureBase64) {
+        travelScheduleSignaturePad.fromDataURL(signatureBase64, {
+            ratio,
+            width,
+            height
+        });
+    }
+}
+
+function clearTravelScheduleSignature() {
+    if (travelScheduleSignaturePad) travelScheduleSignaturePad.clear();
+    window._travelScheduleSavedSignatureBase64 = '';
 }
 
 function _collectTravelScheduleModalData() {
@@ -3054,7 +3092,10 @@ function _collectTravelScheduleModalData() {
         dateText: _tsTH(textarea.dataset.tsDate || ''),
         detail: textarea.value.trim()
     }));
-    return { requesterTel: tel, driverName: driver, itinerary };
+    const signatureBase64 = (travelScheduleSignaturePad && !travelScheduleSignaturePad.isEmpty())
+        ? travelScheduleSignaturePad.toDataURL('image/png')
+        : (window._travelScheduleSavedSignatureBase64 || '');
+    return { requesterTel: tel, driverName: driver, signatureBase64, itinerary };
 }
 
 async function _saveTravelScheduleToFirestore(extra = {}) {
@@ -3160,7 +3201,11 @@ async function generateTravelSchedulePDF() {
         formData.append('files', docxBlob, 'travel_schedule.docx');
         const pdfResp = await fetch(`${cloudRunBaseUrl}/forms/libreoffice/convert`, { method: 'POST', body: formData });
         if (!pdfResp.ok) throw new Error('ไม่สามารถแปลงเป็น PDF ได้ (Cloud Run: ' + pdfResp.status + ')');
-        const pdfBlob = await pdfResp.blob();
+        let pdfBlob = await pdfResp.blob();
+
+        if (schedule.signatureBase64 && typeof promptForSignature === 'function') {
+            pdfBlob = await promptForSignature(pdfBlob, schedule.signatureBase64);
+        }
 
         const requestId = req.id || req.requestId || 'travel_schedule';
         const safeId = requestId.replace(/[\/\\:\.\s]/g, '-');
