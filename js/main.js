@@ -603,8 +603,8 @@ document.querySelectorAll('input[name="modal_memo_type"]').forEach(radio => radi
                 btn.classList.remove('tab-dashboard', 'tab-requests', 'tab-memos', 'tab-announce', 'tab-inactive');
                 if (isActive) {
                     if (name === 'dashboard') {
-                        btn.style.background = 'linear-gradient(135deg,#6366f1,#4f46e5)';
-                        btn.style.color = '#fff';
+                        btn.style.background = 'linear-gradient(135deg,#f9a8d4,#7dd3fc)';
+                        btn.style.color = '#075985';
                     } else {
                         btn.style.background = '';
                         btn.style.color = '';

@@ -475,10 +475,10 @@ function renderAdminRequestsList(requests) {
         const hasTravelScheduleData = !!(request.travelSchedule && JSON.stringify(request.travelSchedule) !== '{}');
         const dispatchBtn = dispatchUrl
             ? `<div class="flex gap-1 w-full">
-                   <a href="${dispatchUrl}" target="_blank" class="btn btn-xs flex-1 text-center" style="background:linear-gradient(135deg,#a855f7,#9333ea);color:white;">📦 ดู</a>
-                   <button onclick="openDispatchModal('${safeId}')" class="btn btn-xs px-2" style="background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;">✏️</button>
+                   <a href="${dispatchUrl}" target="_blank" class="btn btn-xs flex-1 text-center" style="background:linear-gradient(135deg,#f9a8d4,#7dd3fc);color:#075985;">📦 ดู</a>
+                   <button onclick="openDispatchModal('${safeId}')" class="btn btn-xs px-2" style="background:#fdf2f8;color:#be185d;border:1px solid #fbcfe8;">✏️</button>
                </div>`
-            : `<button onclick="openDispatchModal('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#a855f7,#9333ea);color:white;">📦 ออกหนังสือส่ง</button>`;
+            : `<button onclick="openDispatchModal('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#f9a8d4,#7dd3fc);color:#075985;">📦 ออกหนังสือส่ง</button>`;
 
         // --- ส่งบันทึก ---
         const adminMemoBtn = !request.completedMemoUrl
@@ -508,7 +508,7 @@ function renderAdminRequestsList(requests) {
             ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;">✅ มีคำสั่ง</span>`
             : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#fef9c3;color:#b45309;border:1px solid #fde68a;">⏳ รอออกคำสั่ง</span>`;
         const dispatchBadge = dispatchUrl
-            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#f3e8ff;color:#7e22ce;border:1px solid #e9d5ff;">📦 หนังสือส่ง</span>`
+            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#fdf2f8;color:#be185d;border:1px solid #fbcfe8;">📦 หนังสือส่ง</span>`
             : '';
         const travelScheduleBadge = travelScheduleUrl
             ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#ecfdf5;color:#047857;border:1px solid #bbf7d0;">📅 มีกำหนดการ</span>`
@@ -563,9 +563,9 @@ function renderAdminRequestsList(requests) {
                     ${commandActionBtn}
                     ${dispatchBtn}
                     ${travelScheduleUrl ? `<a href="${sanitizeUrl(travelScheduleUrl)}" target="_blank" class="btn btn-xs w-full" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">📅 ดูกำหนดการ</a>` : ''}
-                    ${isEligibleForTravelSchedule(request) ? `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#065f46,#047857);color:white;">${travelScheduleUrl ? '✏️ แก้กำหนดการ' : '📅 กำหนดการเดินทาง'}</button>` : ''}
+                    ${isEligibleForTravelSchedule(request) ? `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#7dd3fc,#f9a8d4);color:#075985;">${travelScheduleUrl ? '✏️ แก้กำหนดการ' : '📅 กำหนดการเดินทาง'}</button>` : ''}
                     <button onclick="openCustomStatusModal('${safeId}', '${safeStatus}', '${safeDocStatus}')"
-                        class="btn btn-xs w-full" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;">
+                        class="btn btn-xs w-full" style="background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;">
                         ✏️ เปลี่ยนสถานะ
                     </button>
                     <button onclick="deleteRequestByAdmin('${safeId}')" class="btn btn-xs w-full mt-0.5" style="background:#fff1f2;color:#e11d48;border:1px solid #fecdd3;">🗑️ ลบ</button>

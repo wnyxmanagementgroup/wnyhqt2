@@ -567,7 +567,7 @@ function renderUserRequests(requests) {
         // ปุ่มสร้างกำหนดการเดินทางพานักเรียน (แสดงเฉพาะกรณีที่ผ่านเงื่อนไข)
         if (typeof isEligibleForTravelSchedule === 'function' && isEligibleForTravelSchedule(req)) {
             const scheduleLabel = travelScheduleUrl ? '✏️ แก้กำหนดการ' : (hasTravelScheduleData ? '📅 สร้างไฟล์กำหนดการ' : '📅 กรอกกำหนดการ');
-            actionBtns += `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#065f46,#047857);color:white;border:none;">${scheduleLabel}</button>`;
+            actionBtns += `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#7dd3fc,#f9a8d4);color:#075985;border:none;">${scheduleLabel}</button>`;
         }
 
         // ปุ่มแก้ไข/ลบ
