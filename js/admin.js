@@ -3239,7 +3239,7 @@ async function generateTravelSchedulePDF() {
             `กำหนดการเดินทาง_${req.requesterName || 'ครู'}.pdf`,
             'กำลังดาวน์โหลดไฟล์กำหนดการเดินทาง...'
         );
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
 
         await _refreshTravelScheduleLists();
         closeTravelScheduleModal();

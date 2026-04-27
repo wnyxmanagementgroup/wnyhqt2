@@ -2014,7 +2014,8 @@ async function handleRequestFormSubmit(e) {
         formData.username = user.username; 
 
         // --- เพิ่มเติม: ตรวจสอบว่าเป็นโหมดแก้ไข (Edit) หรือสร้างใหม่ (Create) ---
-        const editRequestId = document.getElementById('request-id')?.value;
+        const editRequestId = document.getElementById('form-request-id')?.value
+            || document.getElementById('request-id')?.value;
         const isEdit = editRequestId ? true : false;
         let realId = editRequestId; // ถ้าเป็นการแก้ ให้ใช้ ID เดิมเลย
 
