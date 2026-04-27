@@ -140,6 +140,7 @@ async function initializeUserSession(user) {
     const adminBtnCommand       = document.getElementById('admin-nav-command');
     const adminBtnUsers         = document.getElementById('admin-nav-users');
     const adminBtnApprovalLinks = document.getElementById('admin-nav-approval-links');
+    const adminBtnSystemSettings = document.getElementById('admin-nav-system-settings');
     const adminBtnHeads         = document.getElementById('admin-nav-heads');
     const adminSyncBtn          = document.getElementById('admin-sync-btn');
     const adminBackupBtn        = document.getElementById('admin-backup-btn');
@@ -152,6 +153,7 @@ async function initializeUserSession(user) {
         if (adminBtnCommand)       adminBtnCommand.classList.remove('hidden');
         if (adminBtnUsers)         adminBtnUsers.classList.remove('hidden');
         if (adminBtnApprovalLinks) adminBtnApprovalLinks.classList.remove('hidden');
+        if (adminBtnSystemSettings) adminBtnSystemSettings.classList.remove('hidden');
         if (adminBtnHeads)         adminBtnHeads.classList.remove('hidden');
         if (adminSyncBtn)          adminSyncBtn.classList.remove('hidden');
         if (adminBackupBtn)        adminBackupBtn.classList.remove('hidden');
@@ -162,6 +164,7 @@ async function initializeUserSession(user) {
         if (adminBtnCommand)       adminBtnCommand.classList.add('hidden');
         if (adminBtnUsers)         adminBtnUsers.classList.add('hidden');
         if (adminBtnApprovalLinks) adminBtnApprovalLinks.classList.add('hidden');
+        if (adminBtnSystemSettings) adminBtnSystemSettings.classList.add('hidden');
         if (adminBtnHeads)         adminBtnHeads.classList.add('hidden');
         if (adminSyncBtn)          adminSyncBtn.classList.add('hidden');
         if (adminBackupBtn)        adminBackupBtn.classList.add('hidden');

@@ -17,6 +17,7 @@ const PAGE_TITLES = {
     'command-generation-page':    'จัดการบันทึก/คำสั่ง',
     'admin-users-page':           'จัดการผู้ใช้',
     'admin-approval-links-page':  'จัดการลิงก์ลงนาม',
+    'admin-system-settings-page': 'ตั้งค่าระบบ',
 };
 
 const MOBILE_SIDEBAR_BREAKPOINT = 1024;
