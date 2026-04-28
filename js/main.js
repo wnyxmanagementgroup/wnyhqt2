@@ -3,6 +3,7 @@
 let notificationUnsubscribe = null;
 let notificationFallbackUsed = false;
 const WORKFLOW_SETTINGS_CACHE_KEY = 'wny_workflow_settings_cache_v1';
+const WORKFLOW_SETTINGS_OWNER_USERNAMES = ['admin', 'admin2'];
 const DEFAULT_WORKFLOW_SETTINGS = {
     forceMemoUploadForAll: false,
     requiredMemoUploads: {
@@ -466,6 +467,68 @@ function cacheWorkflowSettings(settings) {
     }
 }
 
+function getWorkflowSettingsOwnerPriority(data = {}) {
+    const username = String(data.username || '').trim();
+    const loginName = String(data.loginName || '').trim();
+    const usernameRank = WORKFLOW_SETTINGS_OWNER_USERNAMES.indexOf(username);
+    const loginRank = WORKFLOW_SETTINGS_OWNER_USERNAMES.indexOf(loginName);
+    const rank = [usernameRank, loginRank].filter(v => v >= 0).sort((a, b) => a - b)[0];
+    return Number.isInteger(rank) ? rank : Number.MAX_SAFE_INTEGER;
+}
+
+async function loadWorkflowSettingsFromAdminUserDoc() {
+    if (typeof db === 'undefined' || !db) return null;
+
+    const candidates = [];
+    try {
+        const snap = await db.collection('users')
+            .where('username', 'in', WORKFLOW_SETTINGS_OWNER_USERNAMES)
+            .get();
+        snap.forEach(doc => {
+            const data = doc.data() || {};
+            if (data.workflowSettings) candidates.push(data);
+        });
+    } catch (error) {
+        console.warn('loadWorkflowSettingsFromAdminUserDoc username query error:', error);
+    }
+
+    if (candidates.length === 0) {
+        try {
+            const snap = await db.collection('users')
+                .where('loginName', 'in', WORKFLOW_SETTINGS_OWNER_USERNAMES)
+                .get();
+            snap.forEach(doc => {
+                const data = doc.data() || {};
+                if (data.workflowSettings) candidates.push(data);
+            });
+        } catch (error) {
+            console.warn('loadWorkflowSettingsFromAdminUserDoc loginName query error:', error);
+        }
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => getWorkflowSettingsOwnerPriority(a) - getWorkflowSettingsOwnerPriority(b));
+    return normalizeWorkflowSettings(candidates[0].workflowSettings || {});
+}
+
+async function saveWorkflowSettingsToAdminUserDoc(settings) {
+    if (typeof db === 'undefined' || !db || typeof firebase === 'undefined' || !firebase.auth) {
+        throw new Error('ไม่พบการเชื่อมต่อ Firebase');
+    }
+    const authUser = firebase.auth().currentUser;
+    if (!authUser) throw new Error('ไม่พบ session ของ Firebase');
+
+    const currentUser = typeof getCurrentUser === 'function' ? (getCurrentUser() || {}) : {};
+    await db.collection('users').doc(authUser.uid).set({
+        username: currentUser.username || '',
+        loginName: currentUser.loginName || currentUser.username || '',
+        fullName: currentUser.fullName || '',
+        workflowSettings: normalizeWorkflowSettings(settings),
+        workflowSettingsUpdatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+}
+
 function isUnifiedMemoUploadEnabled() {
     return !!getSystemWorkflowSettings().forceMemoUploadForAll;
 }
@@ -623,13 +686,31 @@ async function loadSystemWorkflowSettings() {
                 cacheWorkflowSettings(remoteSettings);
                 meta.source = 'remote';
             } else {
-                window.systemWorkflowSettings = cachedSettings;
-                meta.warningMessage = 'ยังไม่พบการตั้งค่ากลาง จึงใช้ค่าล่าสุดที่เก็บไว้ในเครื่อง';
+                const fallbackSettings = await loadWorkflowSettingsFromAdminUserDoc();
+                if (fallbackSettings) {
+                    window.systemWorkflowSettings = fallbackSettings;
+                    window.lastPersistedWorkflowSettings = fallbackSettings;
+                    cacheWorkflowSettings(fallbackSettings);
+                    meta.source = 'admin-user-doc';
+                    meta.warningMessage = 'ยังไม่พบ system config กลาง จึงใช้ค่าจากบัญชีแอดมินที่บันทึกล่าสุด';
+                } else {
+                    window.systemWorkflowSettings = cachedSettings;
+                    meta.warningMessage = 'ยังไม่พบการตั้งค่ากลาง จึงใช้ค่าล่าสุดที่เก็บไว้ในเครื่อง';
+                }
             }
         } catch (error) {
             console.warn('loadSystemWorkflowSettings error:', error);
-            window.systemWorkflowSettings = cachedSettings;
-            meta.warningMessage = 'ไม่สามารถโหลดการตั้งค่ากลางได้ จึงใช้ค่าล่าสุดที่เก็บไว้ในเครื่อง';
+            const fallbackSettings = await loadWorkflowSettingsFromAdminUserDoc();
+            if (fallbackSettings) {
+                window.systemWorkflowSettings = fallbackSettings;
+                window.lastPersistedWorkflowSettings = fallbackSettings;
+                cacheWorkflowSettings(fallbackSettings);
+                meta.source = 'admin-user-doc';
+                meta.warningMessage = 'ไม่สามารถอ่าน system config โดยตรง จึงใช้ค่าจากบัญชีแอดมินแทน';
+            } else {
+                window.systemWorkflowSettings = cachedSettings;
+                meta.warningMessage = 'ไม่สามารถโหลดการตั้งค่ากลางได้ จึงใช้ค่าล่าสุดที่เก็บไว้ในเครื่อง';
+            }
         }
     } else {
         window.systemWorkflowSettings = cachedSettings;
@@ -666,18 +747,28 @@ async function saveSystemWorkflowSettings() {
 
     try {
         if (typeof db !== 'undefined' && db) {
-            await db.collection('systemConfig').doc('workflowSettings').set({
-                ...nextSettings,
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedBy: getCurrentUser()?.username || ''
-            }, { merge: true });
+            try {
+                await db.collection('systemConfig').doc('workflowSettings').set({
+                    ...nextSettings,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedBy: getCurrentUser()?.username || ''
+                }, { merge: true });
+            } catch (error) {
+                const message = String(error?.message || error || '');
+                if (!/Missing or insufficient permissions/i.test(message)) throw error;
+                await saveWorkflowSettingsToAdminUserDoc(nextSettings);
+                meta.source = 'admin-user-doc';
+                meta.warningMessage = 'บันทึกผ่านเอกสารบัญชีแอดมินแทน system config กลาง';
+            }
         }
 
         window.systemWorkflowSettings = nextSettings;
         window.lastPersistedWorkflowSettings = nextSettings;
         cacheWorkflowSettings(nextSettings);
-        meta.warningMessage = '';
-        meta.source = 'remote';
+        if (meta.source !== 'admin-user-doc') {
+            meta.warningMessage = '';
+            meta.source = 'remote';
+        }
         applyMemoWorkflowModeUI();
         showAlert('สำเร็จ', forceMemoUploadForAll
             ? 'เปิดโหมดบังคับอัปโหลดไฟล์สำหรับทุกคำขอเรียบร้อยแล้ว'
