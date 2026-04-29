@@ -3067,25 +3067,16 @@ function closeTravelScheduleModal() {
 function initTravelScheduleSignaturePad(signatureBase64 = '') {
     const canvas = document.getElementById('ts-signature-canvas');
     if (!canvas || typeof SignaturePad === 'undefined') return;
-
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
     const rect = canvas.getBoundingClientRect();
     const width = rect.width || canvas.offsetWidth || 280;
     const height = rect.height || canvas.offsetHeight || 154;
-    canvas.width = width * ratio;
-    canvas.height = height * ratio;
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-
-    travelScheduleSignaturePad = new SignaturePad(canvas, {
-        penColor: 'blue',
-        minWidth: 1,
-        maxWidth: 2.4
-    });
+    const result = createSignaturePad(canvas, travelScheduleSignaturePad, { width, height });
+    if (!result) return;
+    travelScheduleSignaturePad = result.pad;
 
     if (signatureBase64) {
         travelScheduleSignaturePad.fromDataURL(signatureBase64, {
-            ratio,
+            ratio: result.ratio,
             width,
             height
         });
@@ -3097,7 +3088,7 @@ function clearTravelScheduleSignature() {
     window._travelScheduleSavedSignatureBase64 = '';
 }
 
-function _collectTravelScheduleModalData() {
+async function _collectTravelScheduleModalData() {
     const req = window._travelScheduleReq;
     if (!req) return null;
     const tel = (document.getElementById('ts-requester-tel').value || '').trim();
@@ -3107,15 +3098,18 @@ function _collectTravelScheduleModalData() {
         dateText: _tsTH(textarea.dataset.tsDate || ''),
         detail: textarea.value.trim()
     }));
-    const signatureBase64 = (travelScheduleSignaturePad && !travelScheduleSignaturePad.isEmpty())
+    const rawSignatureBase64 = (travelScheduleSignaturePad && !travelScheduleSignaturePad.isEmpty())
         ? travelScheduleSignaturePad.toDataURL('image/png')
         : (window._travelScheduleSavedSignatureBase64 || '');
+    const signatureBase64 = (typeof optimizeSignatureDataURL === 'function' && rawSignatureBase64)
+        ? await optimizeSignatureDataURL(rawSignatureBase64, { targetHeight: 340 })
+        : rawSignatureBase64;
     return { requesterTel: tel, driverName: driver, signatureBase64, itinerary };
 }
 
 async function _saveTravelScheduleToFirestore(extra = {}) {
     const req = window._travelScheduleReq;
-    const schedule = _collectTravelScheduleModalData();
+    const schedule = await _collectTravelScheduleModalData();
     if (!req || !schedule) throw new Error('ไม่พบข้อมูลคำขอ');
     const requestId = req.id || req.requestId;
     if (!requestId) throw new Error('ไม่พบเลขที่คำขอ');
@@ -3163,7 +3157,7 @@ async function saveTravelScheduleDraft() {
 async function generateTravelSchedulePDF() {
     const req    = window._travelScheduleReq;
     if (!req) return;
-    const schedule = _collectTravelScheduleModalData();
+    const schedule = await _collectTravelScheduleModalData();
     if (!schedule?.requesterTel || !schedule?.driverName) {
         showAlert('กรุณากรอกข้อมูลให้ครบ', 'ต้องกรอกเบอร์โทรครูผู้ควบคุม และชื่อพนักงานขับรถ');
         return;
@@ -3219,7 +3213,10 @@ async function generateTravelSchedulePDF() {
         let pdfBlob = await pdfResp.blob();
 
         if (schedule.signatureBase64 && typeof promptForSignature === 'function') {
-            pdfBlob = await promptForSignature(pdfBlob, schedule.signatureBase64);
+            const signatureForPdf = (typeof optimizeSignatureDataURL === 'function')
+                ? await optimizeSignatureDataURL(schedule.signatureBase64, { targetHeight: 340 })
+                : schedule.signatureBase64;
+            pdfBlob = await promptForSignature(pdfBlob, signatureForPdf);
         }
 
         const requestId = req.id || req.requestId || 'travel_schedule';

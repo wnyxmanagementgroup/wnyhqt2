@@ -210,20 +210,12 @@ function closeSignatureModal() {
 function _initSignaturePad() {
     const canvas = document.getElementById('signature-pad-canvas');
     if (!canvas) return;
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
-    canvas.width  = canvas.offsetWidth  * ratio;
-    canvas.height = canvas.offsetHeight * ratio;
-    canvas.getContext('2d').scale(ratio, ratio);
-
-    if (!sigState.padInstance) {
-        sigState.padInstance = new SignaturePad(canvas, {
-            penColor:  'blue',
-            minWidth:  1.0,
-            maxWidth:  2.5,
-        });
-    } else {
-        sigState.padInstance.clear();
-    }
+    const result = createSignaturePad(canvas, sigState.padInstance, {
+        width: canvas.offsetWidth || 300,
+        height: canvas.offsetHeight || 180
+    });
+    if (!result) return;
+    sigState.padInstance = result.pad;
 }
 
 function clearSignaturePad() {
@@ -237,12 +229,15 @@ function closeSignaturePadModal() {}
 // ============================================================
 // 3. วางลายเซ็นบน PDF — สร้าง draggable overlay
 // ============================================================
-function placeSignatureOnPdf() {
+async function placeSignatureOnPdf() {
     if (!sigState.padInstance || sigState.padInstance.isEmpty()) {
         alert('กรุณาวาดลายเซ็นก่อนกดวาง');
         return;
     }
-    const dataURL = sigState.padInstance.toDataURL('image/png');
+    const rawDataURL = sigState.padInstance.toDataURL('image/png');
+    const dataURL = (typeof optimizeSignatureDataURL === 'function')
+        ? await optimizeSignatureDataURL(rawDataURL)
+        : rawDataURL;
     sigState.lastSigDataURL = dataURL;
     _createSignaturePlacement(dataURL);
     document.getElementById('btn-dup-sig').classList.remove('hidden');

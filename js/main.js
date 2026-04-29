@@ -2549,49 +2549,33 @@ let _reqDrawPadInstance = null;
 function initFormSignaturePad() {
     const canvas = document.getElementById('form-sig-canvas');
     if (!canvas) return;
-
-    // CSS padding-top:100% ทำให้ canvas เป็นสี่เหลี่ยมจัตุรัสแล้ว → อ่านแค่ native pixel
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
-    window._sigPadRatio = ratio;
-    const side = canvas.offsetWidth;
-    canvas.width  = side * ratio;
-    canvas.height = side * ratio;
-    canvas.getContext('2d').scale(ratio, ratio);
-
-    if (requesterSignaturePad) {
-        requesterSignaturePad.clear();
-    } else {
-        requesterSignaturePad = new SignaturePad(canvas, {
-            penColor: 'blue',
-            minWidth: 1.0,
-            maxWidth: 2.5
-        });
-    }
+    const side = canvas.offsetWidth || 280;
+    const result = createSignaturePad(canvas, requesterSignaturePad, {
+        width: side,
+        height: side
+    });
+    if (!result) return;
+    requesterSignaturePad = result.pad;
+    window._sigPadRatio = result.ratio;
 }
 
 // --- 1b. Initialize signature pad ในฟอร์มแก้ไข (edit-sig-canvas) ---
 function initEditSignaturePad() {
     const canvas = document.getElementById('edit-sig-canvas');
     if (!canvas) return;
+    const side = canvas.offsetWidth || 280;
+    const result = createSignaturePad(canvas, editSignaturePad, {
+        width: side,
+        height: side
+    });
+    if (!result) return;
+    editSignaturePad = result.pad;
+    window._sigPadRatio = result.ratio;
 
-    // CSS padding-top:100% ทำให้ canvas เป็นสี่เหลี่ยมจัตุรัสแล้ว → อ่านแค่ native pixel
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
-    window._sigPadRatio = ratio;
-    const side = canvas.offsetWidth;
-    canvas.width  = side * ratio;
-    canvas.height = side * ratio;
-    canvas.getContext('2d').scale(ratio, ratio);
-
-    if (editSignaturePad) {
-        editSignaturePad.clear();
-    } else {
-        editSignaturePad = new SignaturePad(canvas, {
-            penColor: 'blue',
-            minWidth: 1.0,
-            maxWidth: 2.5
-        });
-        const clearBtn = document.getElementById('edit-sig-clear-btn');
-        if (clearBtn) clearBtn.addEventListener('click', () => editSignaturePad && editSignaturePad.clear());
+    const clearBtn = document.getElementById('edit-sig-clear-btn');
+    if (clearBtn && !clearBtn.dataset.boundSignatureClear) {
+        clearBtn.dataset.boundSignatureClear = '1';
+        clearBtn.addEventListener('click', () => editSignaturePad && editSignaturePad.clear());
     }
 }
 
@@ -2602,23 +2586,14 @@ function openRequesterDrawSigModal() {
     modal.classList.remove('hidden');
 
     const canvas = document.getElementById('requester-draw-canvas');
-    // CSS padding-top:100% ทำให้ canvas เป็นสี่เหลี่ยมจัตุรัสแล้ว → อ่านแค่ native pixel
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
-    window._sigPadRatio = ratio;
-    const side = canvas.offsetWidth;
-    canvas.width  = side * ratio;
-    canvas.height = side * ratio;
-    canvas.getContext('2d').scale(ratio, ratio);
-
-    if (_reqDrawPadInstance) {
-        _reqDrawPadInstance.clear();
-    } else {
-        _reqDrawPadInstance = new SignaturePad(canvas, {
-            penColor: 'blue',
-            minWidth: 1.0,
-            maxWidth: 2.5
-        });
-    }
+    const side = canvas.offsetWidth || 280;
+    const result = createSignaturePad(canvas, _reqDrawPadInstance, {
+        width: side,
+        height: side
+    });
+    if (!result) return;
+    _reqDrawPadInstance = result.pad;
+    window._sigPadRatio = result.ratio;
 }
 
 // --- 3. ยืนยันลายเซ็นใน draw modal → เปิด stamper modal กับ PDF ---
@@ -2628,7 +2603,10 @@ async function handleRequesterDrawConfirm() {
         return;
     }
 
-    const signatureBase64 = _reqDrawPadInstance.toDataURL('image/png');
+    const rawSignatureBase64 = _reqDrawPadInstance.toDataURL('image/png');
+    const signatureBase64 = (typeof optimizeSignatureDataURL === 'function')
+        ? await optimizeSignatureDataURL(rawSignatureBase64)
+        : rawSignatureBase64;
     document.getElementById('requester-draw-sig-modal').classList.add('hidden');
 
     const pdfUrl = window._lastCreatedDoc.pdfUrl;

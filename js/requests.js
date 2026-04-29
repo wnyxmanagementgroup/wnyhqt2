@@ -1322,7 +1322,10 @@ async function generateDocumentFromDraft() {
         // Step 3: เตรียมลายเซ็น (ใหม่จาก pad > เดิมจาก cache)
         let signatureBase64 = null;
         if (typeof editSignaturePad !== 'undefined' && editSignaturePad && !editSignaturePad.isEmpty()) {
-            signatureBase64 = editSignaturePad.toDataURL('image/png');
+            const rawSignatureBase64 = editSignaturePad.toDataURL('image/png');
+            signatureBase64 = (typeof optimizeSignatureDataURL === 'function')
+                ? await optimizeSignatureDataURL(rawSignatureBase64, { targetHeight: 340 })
+                : rawSignatureBase64;
         } else if (formData.signatureBase64) {
             signatureBase64 = formData.signatureBase64;
         }
@@ -1736,6 +1739,9 @@ function promptForSignature(pdfBlob, signatureBase64) {
         window.skipSignaturePlacement = () => { cleanup(); resolve(pdfBlob); };
 
         try {
+            const placementSignatureBase64 = (typeof optimizeSignatureDataURL === 'function')
+                ? await optimizeSignatureDataURL(signatureBase64, { targetHeight: 340 })
+                : signatureBase64;
             const modal = document.getElementById('requester-stamper-modal');
             modal.classList.remove('hidden');
             modal.style.display = 'flex';
@@ -1812,7 +1818,7 @@ function promptForSignature(pdfBlob, signatureBase64) {
                 user-select: none;
             `;
             dragEl.innerHTML = `
-                <img src="${signatureBase64}" style="width:100%; display:block; pointer-events:none;">
+                <img src="${placementSignatureBase64}" style="width:100%; display:block; pointer-events:none;">
                 <div class="sig-resize-handle"
                     style="position:absolute; bottom:-7px; right:-7px; width:20px; height:20px; background:#3b82f6; border-radius:4px; cursor:nwse-resize; z-index:51; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,0.4);" title="ลากเพื่อย่อ/ขยาย">
                     <svg width="12" height="12" viewBox="0 0 10 10" style="pointer-events:none;">
@@ -1965,7 +1971,7 @@ function promptForSignature(pdfBlob, signatureBase64) {
                     const pdfDoc    = await PDFLib.PDFDocument.load(pdfBytes);
                     const pdfPage   = pdfDoc.getPages()[pageIndex];
 
-                    const base64Data = signatureBase64.replace(/^data:image\/\w+;base64,/, '');
+                    const base64Data = placementSignatureBase64.replace(/^data:image\/\w+;base64,/, '');
                     const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
                     const sigImage   = await pdfDoc.embedPng(imageBytes);
 
@@ -2026,7 +2032,10 @@ async function handleRequestFormSubmit(e) {
         // --- เพิ่มเติม: ดึงข้อมูลลายเซ็นจากกระดาน ---
         let signatureBase64 = null;
         if (typeof requesterSignaturePad !== 'undefined' && !requesterSignaturePad.isEmpty()) {
-            signatureBase64 = requesterSignaturePad.toDataURL("image/png"); 
+            const rawSignatureBase64 = requesterSignaturePad.toDataURL("image/png");
+            signatureBase64 = (typeof optimizeSignatureDataURL === 'function')
+                ? await optimizeSignatureDataURL(rawSignatureBase64, { targetHeight: 340 })
+                : rawSignatureBase64;
         }
         formData.signatureBase64 = signatureBase64;
 
@@ -3279,52 +3288,6 @@ async function renderPdfForRequesterStamper(pdfBlob) {
 // ---------------------------------------------------------
 // 3. ฟังก์ชันประทับลายเซ็นด้วย pdf-lib
 // ตัดพื้นที่ว่าง (transparent) รอบๆ ลายเซ็นออก เพื่อให้ได้ aspect ratio ที่แท้จริง
-function trimSignatureImage(base64) {
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-            const tmpCanvas = document.createElement('canvas');
-            tmpCanvas.width  = img.width;
-            tmpCanvas.height = img.height;
-            const ctx = tmpCanvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-
-            const pixels = ctx.getImageData(0, 0, img.width, img.height).data;
-            let minX = img.width, maxX = 0, minY = img.height, maxY = 0;
-
-            for (let y = 0; y < img.height; y++) {
-                for (let x = 0; x < img.width; x++) {
-                    const alpha = pixels[(y * img.width + x) * 4 + 3];
-                    if (alpha > 10) {
-                        if (x < minX) minX = x;
-                        if (x > maxX) maxX = x;
-                        if (y < minY) minY = y;
-                        if (y > maxY) maxY = y;
-                    }
-                }
-            }
-
-            // ถ้าไม่มี pixel จริงเลย ส่งคืนต้นฉบับ
-            if (maxX <= minX || maxY <= minY) { resolve(base64); return; }
-
-            // เพิ่ม padding เล็กน้อย
-            const pad = 4;
-            minX = Math.max(0, minX - pad);
-            minY = Math.max(0, minY - pad);
-            maxX = Math.min(img.width,  maxX + pad);
-            maxY = Math.min(img.height, maxY + pad);
-
-            const out = document.createElement('canvas');
-            out.width  = maxX - minX;
-            out.height = maxY - minY;
-            out.getContext('2d').drawImage(tmpCanvas, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
-            resolve(out.toDataURL('image/png'));
-        };
-        img.src = base64;
-    });
-}
-
-// ---------------------------------------------------------
 async function stampAndSave(x, y) {
     showAlert('กำลังดำเนินการ', 'กำลังประทับลายเซ็นและบันทึกข้อมูล... กรุณารอสักครู่', false); // แจ้งเตือนแบบซ่อนปุ่ม OK
     
@@ -3333,14 +3296,24 @@ async function stampAndSave(x, y) {
         const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
         const page = pdfDoc.getPages()[0]; // หน้าแรก
 
-        // ใช้ภาพ full canvas (square 500×500) โดยตรง — square→square ไม่บิดเบือน
-        const _sigRaw = requesterStamperState.signatureBase64 || '';
-        const base64Data = _sigRaw.includes(',') ? _sigRaw.split(',')[1] : _sigRaw;
+        const optimizedSignatureBase64 = (typeof optimizeSignatureDataURL === 'function')
+            ? await optimizeSignatureDataURL(requesterStamperState.signatureBase64 || '', { targetHeight: 340 })
+            : (requesterStamperState.signatureBase64 || '');
+        const base64Data = optimizedSignatureBase64.includes(',') ? optimizedSignatureBase64.split(',')[1] : optimizedSignatureBase64;
         if (!base64Data) throw new Error('ไม่พบข้อมูลลายเซ็น กรุณาวาดลายเซ็นใหม่');
         const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
         const signatureImage = await pdfDoc.embedPng(imageBytes);
-        const sigWidth  = 500;
-        const sigHeight = 500;
+        const { width: imageWidth, height: imageHeight } = (typeof getImageDimensionsFromDataURL === 'function')
+            ? await getImageDimensionsFromDataURL(optimizedSignatureBase64)
+            : { width: 900, height: 320 };
+        const aspectRatio = imageWidth / Math.max(1, imageHeight);
+        let sigWidth = Math.min(220, Math.max(145, page.getWidth() * 0.24));
+        let sigHeight = sigWidth / Math.max(1.2, aspectRatio);
+        if (sigHeight > 90) {
+            const fitScale = 90 / sigHeight;
+            sigHeight *= fitScale;
+            sigWidth *= fitScale;
+        }
 
         page.drawImage(signatureImage, {
             x: x - (sigWidth / 2),

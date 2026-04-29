@@ -185,6 +185,130 @@ function renderInlineLoader(message = 'กำลังโหลดข้อม�
     return `<div class="flex flex-col items-center justify-center py-10"><div class="loader mb-2"></div><p class="text-gray-500 animate-pulse">${escapeHtml(message)}</p></div>`;
 }
 
+const DEFAULT_SIGNATURE_PAD_OPTIONS = Object.freeze({
+    penColor: '#0f172a',
+    minWidth: 0.7,
+    maxWidth: 2.1,
+    throttle: 8,
+    minDistance: 0.35,
+    velocityFilterWeight: 0.52
+});
+
+function getSignatureCanvasRatio(multiplier = 1.35) {
+    const dpr = window.devicePixelRatio || 1;
+    return Math.min(4, Math.max(2, dpr * multiplier));
+}
+
+function prepareSignatureCanvas(canvas, options = {}) {
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const cssWidth = Math.max(1, Math.round(options.width || rect.width || canvas.offsetWidth || 300));
+    const cssHeight = Math.max(1, Math.round(options.height || rect.height || canvas.offsetHeight || cssWidth));
+    const ratio = getSignatureCanvasRatio(options.multiplier || 1.35);
+
+    canvas.width = Math.round(cssWidth * ratio);
+    canvas.height = Math.round(cssHeight * ratio);
+
+    const ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(ratio, ratio);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    return { ctx, ratio, width: cssWidth, height: cssHeight };
+}
+
+function createSignaturePad(canvas, previousPad = null, options = {}) {
+    if (!canvas || typeof SignaturePad === 'undefined') return null;
+    const prepared = prepareSignatureCanvas(canvas, options);
+    if (!prepared) return null;
+
+    if (previousPad && typeof previousPad.off === 'function') previousPad.off();
+
+    const pad = new SignaturePad(canvas, {
+        ...DEFAULT_SIGNATURE_PAD_OPTIONS,
+        ...(options.padOptions || {})
+    });
+
+    return { pad, ...prepared };
+}
+
+function getImageDimensionsFromDataURL(dataURL) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.width, height: img.height });
+        img.onerror = reject;
+        img.src = dataURL;
+    });
+}
+
+function optimizeSignatureDataURL(dataURL, options = {}) {
+    if (!dataURL) return Promise.resolve(dataURL);
+    const padding = Number.isFinite(options.padding) ? options.padding : 8;
+    const minAlpha = Number.isFinite(options.minAlpha) ? options.minAlpha : 8;
+    const targetHeight = Number.isFinite(options.targetHeight) ? options.targetHeight : 320;
+    const maxScale = Number.isFinite(options.maxScale) ? options.maxScale : 2;
+
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const srcCanvas = document.createElement('canvas');
+            srcCanvas.width = img.width;
+            srcCanvas.height = img.height;
+            const srcCtx = srcCanvas.getContext('2d');
+            srcCtx.drawImage(img, 0, 0);
+
+            const pixels = srcCtx.getImageData(0, 0, img.width, img.height).data;
+            let minX = img.width;
+            let minY = img.height;
+            let maxX = -1;
+            let maxY = -1;
+
+            for (let y = 0; y < img.height; y++) {
+                for (let x = 0; x < img.width; x++) {
+                    const alpha = pixels[(y * img.width + x) * 4 + 3];
+                    if (alpha > minAlpha) {
+                        if (x < minX) minX = x;
+                        if (y < minY) minY = y;
+                        if (x > maxX) maxX = x;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+            }
+
+            if (maxX < minX || maxY < minY) {
+                resolve(dataURL);
+                return;
+            }
+
+            minX = Math.max(0, minX - padding);
+            minY = Math.max(0, minY - padding);
+            maxX = Math.min(img.width - 1, maxX + padding);
+            maxY = Math.min(img.height - 1, maxY + padding);
+
+            const cropWidth = Math.max(1, maxX - minX + 1);
+            const cropHeight = Math.max(1, maxY - minY + 1);
+            const scale = Math.min(maxScale, Math.max(1, targetHeight / cropHeight));
+            const outWidth = Math.max(1, Math.round(cropWidth * scale));
+            const outHeight = Math.max(1, Math.round(cropHeight * scale));
+
+            const outCanvas = document.createElement('canvas');
+            outCanvas.width = outWidth;
+            outCanvas.height = outHeight;
+            const outCtx = outCanvas.getContext('2d');
+            outCtx.imageSmoothingEnabled = true;
+            outCtx.imageSmoothingQuality = 'high';
+            outCtx.drawImage(srcCanvas, minX, minY, cropWidth, cropHeight, 0, 0, outWidth, outHeight);
+            resolve(outCanvas.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve(dataURL);
+        img.src = dataURL;
+    });
+}
+
 let _downloadIndicatorActiveCount = 0;
 let _downloadIndicatorHideTimer = null;
 
