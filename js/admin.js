@@ -345,6 +345,7 @@ async function handleAdminGenerateCommand() {
         if (pdfUploadUrl) {
             requestData.preGeneratedPdfUrl = pdfUploadUrl;
             requestData.preGeneratedDocUrl = docUploadUrl || '';
+            let keptAtAdminReview = false;
             
             // ส่งข้อมูลไป GAS (เพื่อบันทึกใน Sheet)
             await apiCall('POST', 'approveCommand', requestData);
@@ -356,11 +357,21 @@ async function handleAdminGenerateCommand() {
                 // (ใช้ sort ใน JS โดยอิง timestamp/lastUpdated — ต้องมี field นี้)
                 const existingDoc = await db.collection('requests').doc(safeId).get();
                 const hasTimestamp = existingDoc.exists && existingDoc.data().timestamp;
+                const existingData = existingDoc.exists ? (existingDoc.data() || {}) : {};
+                const keepAtAdminReview = existingData.docStatus === 'waiting_admin_review'
+                    && existingData.activeApprovalDocType !== 'command'
+                    && existingData.activeApprovalDocType !== 'dispatch';
+                keptAtAdminReview = keepAtAdminReview;
+                const nextDocStatus = keepAtAdminReview ? 'waiting_admin_review' : 'waiting_saraban';
+                const nextCommandStatus = keepAtAdminReview
+                    ? 'สร้างคำสั่งแล้ว รอแอดมินส่งพร้อมบันทึก'
+                    : 'รอสารบรรณออกเลขที่';
 
                 await db.collection('requests').doc(safeId).set({
                     // ── fields สำหรับ query ──
-                    docStatus:     'waiting_saraban',   // ส่งต่อสารบรรณอัตโนมัติ
+                    docStatus:     nextDocStatus,
                     docType:       'command',            // ระบุว่าเป็นเอกสารคำสั่ง
+                    activeApprovalDocType: 'command',
                     // เพิ่ม timestamp เฉพาะเมื่อยังไม่มี (ใช้ sort ใน JS)
                     ...(hasTimestamp ? {} : { timestamp: firebase.firestore.FieldValue.serverTimestamp() }),
 
@@ -374,16 +385,19 @@ async function handleAdminGenerateCommand() {
 
                     // ── fields PDF ──
                     commandTemplateType: commandType,
-                    commandStatus:  'รอสารบรรณออกเลขที่',
+                    commandStatus:  nextCommandStatus,
                     commandPdfUrl:  pdfUploadUrl,
+                    currentPdfUrl:  pdfUploadUrl,
 
                     attendees:     attendees,
                     lastUpdated:   firebase.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
             }
 
-            showAlert('สำเร็จ',
-                'สร้างเอกสารคำสั่งเรียบร้อยแล้ว ✅\nเอกสารถูกส่งไปยังงานสารบรรณเพื่อออกเลขที่และวันที่');
+            const successMessage = keptAtAdminReview
+                ? 'สร้างเอกสารคำสั่งเรียบร้อยแล้ว ✅\nคำสั่งถูกสร้างไว้แล้ว และเรื่องยังรอแอดมินส่งต่อพร้อมบันทึกข้อความ'
+                : 'สร้างเอกสารคำสั่งเรียบร้อยแล้ว ✅\nเอกสารถูกส่งไปยังงานสารบรรณเพื่อออกเลขที่และวันที่';
+            showAlert('สำเร็จ', successMessage);
             await fetchAllRequestsForCommand();
         }
     } catch (error) {
@@ -838,6 +852,11 @@ async function handleDispatchFormSubmit(e) {
         // อัปเดต GAS (Google Sheets) แบบส่งข้อมูลชุดสมบูรณ์ป้องกันฟิลด์ว่าง
         await apiCall('POST', 'updateRequest', {
             ...requestData, // ส่งข้อมูลทั้งหมดที่มี (ชื่อผู้ขอ, รายชื่อ, สถานที่ ฯลฯ) เพื่อไม่ให้ค่าในชีทหาย
+            docType: 'dispatch',
+            activeApprovalDocType: 'dispatch',
+            docStatus: 'waiting_saraban',
+            dispatchStatus: 'waiting_saraban',
+            currentPdfUrl: permanentPdfUrl,
             dispatchBookUrl: permanentPdfUrl,
             dispatchBookPdfUrl: permanentPdfUrl,
             skipPdfUrlUpdate: true // ป้องกัน GAS เขียนทับ PdfUrl หลักของคำขอ
@@ -849,6 +868,11 @@ async function handleDispatchFormSubmit(e) {
         if (typeof db !== 'undefined') {
              try {
                 await db.collection('requests').doc(safeId).set({
+                    docType: 'dispatch',
+                    activeApprovalDocType: 'dispatch',
+                    docStatus: 'waiting_saraban',
+                    dispatchStatus: 'waiting_saraban',
+                    currentPdfUrl: permanentPdfUrl,
                     dispatchBookPdfUrl: permanentPdfUrl,
                     dispatchBookUrl: permanentPdfUrl,
                     dispatchMeta: {
@@ -903,7 +927,7 @@ async function handleDispatchFormSubmit(e) {
         document.getElementById('dispatch-modal').style.display = 'none';
         document.getElementById('dispatch-form').reset(); 
         
-        showAlert('สำเร็จ', 'บันทึกหนังสือส่งเรียบร้อยแล้ว');
+        showAlert('สำเร็จ', 'บันทึกหนังสือส่งเรียบร้อยแล้ว และส่งต่อให้งานสารบรรณออกเลขที่/วันที่เรียบร้อย');
         
         // โหลดรายการใหม่เพื่อให้หน้าจอแสดงปุ่ม "ดูหนังสือส่ง"
         await fetchAllRequestsForCommand();
@@ -1451,6 +1475,116 @@ function _applyMemoFilterAndSearch() {
     renderAdminMemosList(filtered);
 }
 
+function getSignedPackageEntries(record = {}) {
+    const entries = [];
+    const pushEntry = (key, label, url) => {
+        if (!url || entries.some(item => item.url === url)) return;
+        entries.push({ key, label, url });
+    };
+
+    const memoUrl = record.completedMemoUrl
+        || record.adminMemoUrl
+        || ((record.status === 'เสร็จสิ้น' || record.status === 'รับไฟล์กลับไปใช้งาน')
+            ? (record.pdfUrl || record.memoPdfUrl || record.currentPdfUrl || '')
+            : '');
+    pushEntry('memo', 'บันทึกข้อความ', memoUrl);
+
+    if (record.completedCommandUrl) {
+        pushEntry('command', 'คำสั่งไปราชการ', record.completedCommandUrl);
+    }
+
+    if (record.completedDispatchBookUrl || record.dispatchStatus === 'เสร็จสิ้น') {
+        pushEntry('dispatch', 'หนังสือส่ง', record.completedDispatchBookUrl || record.dispatchBookUrl || record.dispatchBookPdfUrl || '');
+    }
+
+    return entries;
+}
+
+function decodeBase64ToArrayBuffer(base64) {
+    const bin = window.atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+}
+
+async function fetchPdfArrayBufferForMerge(url) {
+    if (!url) throw new Error('ไม่พบลิงก์ไฟล์ PDF');
+
+    if (url.includes('drive.google.com')) {
+        const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+        const fileId = match ? match[1] : '';
+        if (!fileId) throw new Error('ไม่สามารถอ่านรหัสไฟล์ Google Drive ได้');
+
+        const scriptUrl = "https://script.google.com/macros/s/AKfycbyyUHx5gy7SFow_xex1Jt8TorLaWpxIgoYausg9z8QuSfoL8g_1r5on104A2m-PbGIWpA/exec";
+        const response = await fetch(`${scriptUrl}?action=getPdfBase64&fileId=${fileId}`);
+        const result = await response.json();
+        if (result.status !== 'success') throw new Error(result.message || 'ดึงไฟล์ PDF จาก Google Drive ไม่สำเร็จ');
+        return decodeBase64ToArrayBuffer(result.data);
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`ดาวน์โหลดไฟล์ไม่สำเร็จ (${response.status})`);
+    return response.arrayBuffer();
+}
+
+window.downloadAdminMergedPackage = async function(requestId) {
+    if (!checkAdminAccess()) return;
+
+    const safeId = requestId.replace(/[\/\\:\.]/g, '-');
+
+    try {
+        showAlert('กำลังดำเนินการ', 'กำลังรวมไฟล์ PDF ที่ลงนามเสร็จแล้ว...', false);
+
+        let record = allRequestsCache.find(r => r.id === requestId || r.requestId === requestId || r.refNumber === requestId) || {};
+        if (typeof db !== 'undefined') {
+            const snap = await db.collection('requests').doc(safeId).get();
+            if (snap.exists) record = { ...record, ...snap.data() };
+        }
+
+        const entries = getSignedPackageEntries(record);
+        if (entries.length === 0) throw new Error('ยังไม่พบไฟล์ที่ลงนามเสร็จแล้วสำหรับรวมส่งเขต');
+
+        const mergedPdf = await PDFLib.PDFDocument.create();
+        const failed = [];
+
+        for (const entry of entries) {
+            try {
+                const arrayBuffer = await fetchPdfArrayBufferForMerge(entry.url);
+                const srcPdf = await PDFLib.PDFDocument.load(arrayBuffer);
+                const pages = await mergedPdf.copyPages(srcPdf, srcPdf.getPageIndices());
+                pages.forEach(page => mergedPdf.addPage(page));
+            } catch (error) {
+                console.warn(`merge package skipped: ${entry.label}`, error);
+                failed.push(entry.label);
+            }
+        }
+
+        if (mergedPdf.getPageCount() === 0) {
+            throw new Error('ไม่สามารถรวมไฟล์ได้ เนื่องจากทุกไฟล์เปิดไม่สำเร็จ');
+        }
+
+        const mergedBytes = await mergedPdf.save();
+        const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+        const downloadUrl = URL.createObjectURL(blob);
+        if (typeof triggerBrowserDownload === 'function') {
+            triggerBrowserDownload(downloadUrl, `ชุดเอกสารส่งเขต_${safeId}.pdf`);
+        } else {
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = `ชุดเอกสารส่งเขต_${safeId}.pdf`;
+            link.click();
+        }
+        setTimeout(() => URL.revokeObjectURL(downloadUrl), 1500);
+
+        document.getElementById('alert-modal').style.display = 'none';
+        const failedText = failed.length ? `\n\nหมายเหตุ: ข้ามไฟล์ ${failed.join(', ')}` : '';
+        showAlert('✅ สำเร็จ', `รวมไฟล์ลงนามสำหรับส่งเขตเรียบร้อยแล้ว (${entries.length - failed.length}/${entries.length} ไฟล์)${failedText}`);
+    } catch (error) {
+        try { document.getElementById('alert-modal').style.display = 'none'; } catch (_) {}
+        showAlert('ผิดพลาด', error.message);
+    }
+};
+
 function renderAdminMemosList(memos) {
     const container = document.getElementById('admin-memos-list');
     if (!memos || memos.length === 0) {
@@ -1459,8 +1593,10 @@ function renderAdminMemosList(memos) {
     }
 
     container.innerHTML = memos.map((memo, idx) => {
-        const hasCompletedFiles = memo.completedMemoUrl || memo.adminMemoUrl || memo.completedCommandUrl || memo.dispatchBookUrl;
+        const hasCompletedFiles = memo.completedMemoUrl || memo.adminMemoUrl || memo.completedCommandUrl || memo.completedDispatchBookUrl || memo.dispatchBookUrl;
         const hasCommand        = !!memo.completedCommandUrl || !!memo.commandPdfUrl;
+        const signedPackageEntries = getSignedPackageEntries(memo);
+        const canMergePackage = signedPackageEntries.length >= 2;
         // ★ แยก gasId (GAS API) กับ refId (เลขที่บันทึก / Firestore key)
         const gasId          = escapeHtml(memo.id || '');
         const refId          = escapeHtml(memo.refNumber || memo.requestId || memo.id || '');
@@ -1494,8 +1630,8 @@ function renderAdminMemosList(memos) {
                 ? `<a href="${memo.adminMemoUrl}" target="_blank" class="btn btn-xs bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200">📄 บันทึก</a>` : '',
             (memo.completedCommandUrl || memo.commandPdfUrl)
                 ? `<a href="${memo.completedCommandUrl || memo.commandPdfUrl}" target="_blank" class="btn btn-xs bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200">📋 คำสั่ง</a>` : '',
-            memo.dispatchBookUrl
-                ? `<a href="${memo.dispatchBookUrl}" target="_blank" class="btn btn-xs bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200">📦 หนังสือส่ง</a>` : '',
+            (memo.completedDispatchBookUrl || memo.dispatchBookUrl || memo.dispatchBookPdfUrl)
+                ? `<a href="${memo.completedDispatchBookUrl || memo.dispatchBookUrl || memo.dispatchBookPdfUrl}" target="_blank" class="btn btn-xs bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200">📦 หนังสือส่ง</a>` : '',
         ].filter(Boolean).join('');
 
         // สีแถว
@@ -1532,6 +1668,11 @@ function renderAdminMemosList(memos) {
                     <button onclick="handleAdminFinalize('${refId}')"
                         class="btn btn-xs bg-green-600 hover:bg-green-700 text-white">
                         📦 ไฟนล์และส่งเก็บ
+                    </button>` : ''}
+                    ${canMergePackage ? `
+                    <button onclick="downloadAdminMergedPackage('${refId}')"
+                        class="btn btn-xs bg-sky-100 text-sky-700 border border-sky-300 hover:bg-sky-200">
+                        🧷 รวมส่งเขต
                     </button>` : ''}
                     <button onclick="deleteMemoByAdmin('${refId}', '${gasId}')"
                         class="text-xs text-red-400 hover:text-red-600">
@@ -2657,15 +2798,21 @@ function _renderOverdueList(requests) {
     const container = document.getElementById('admin-overdue-list');
     if (!container) return;
 
+    const now = new Date();
+    const thisMonth = now.getMonth();
+    const thisYear = now.getFullYear();
     const threeDaysAgo = Date.now() - 3 * 24 * 60 * 60 * 1000;
     const overdue = requests.filter(r => {
         if (r.status === 'เสร็จสิ้น') return false;
         const ts = r.timestamp?.seconds ? r.timestamp.seconds * 1000 : new Date(r.timestamp || 0).getTime();
-        return ts < threeDaysAgo && ts > 0;
+        if (!(ts > 0)) return false;
+        const createdAt = new Date(ts);
+        if (createdAt.getMonth() !== thisMonth || createdAt.getFullYear() !== thisYear) return false;
+        return ts < threeDaysAgo;
     }).slice(0, 8);
 
     if (!overdue.length) {
-        container.innerHTML = `<div class="text-green-600 text-sm flex items-center gap-2">✅ ไม่มีเอกสารค้างเกิน 3 วัน</div>`;
+        container.innerHTML = `<div class="text-green-600 text-sm flex items-center gap-2">✅ ไม่มีเอกสารค้างเกิน 3 วันในเดือนนี้</div>`;
         return;
     }
 
@@ -2687,14 +2834,22 @@ function _renderRecentList(requests) {
     const container = document.getElementById('admin-recent-list');
     if (!container) return;
 
-    const sorted = [...requests].sort((a, b) => {
+    const now = new Date();
+    const thisMonth = now.getMonth();
+    const thisYear = now.getFullYear();
+    const sorted = requests.filter(r => {
+        const ts = r.timestamp?.seconds ? r.timestamp.seconds * 1000 : new Date(r.timestamp || 0).getTime();
+        if (!(ts > 0)) return false;
+        const createdAt = new Date(ts);
+        return createdAt.getMonth() === thisMonth && createdAt.getFullYear() === thisYear;
+    }).sort((a, b) => {
         const ta = a.timestamp?.seconds ? a.timestamp.seconds * 1000 : new Date(a.timestamp || 0).getTime();
         const tb = b.timestamp?.seconds ? b.timestamp.seconds * 1000 : new Date(b.timestamp || 0).getTime();
         return tb - ta;
     }).slice(0, 8);
 
     if (!sorted.length) {
-        container.innerHTML = `<div class="text-gray-400 text-sm">ยังไม่มีข้อมูล</div>`;
+        container.innerHTML = `<div class="text-gray-400 text-sm">ยังไม่มีรายการในเดือนนี้</div>`;
         return;
     }
 
@@ -3267,37 +3422,66 @@ async function handleAdminFinalize(requestId) {
             throw new Error('เอกสารยังไม่พร้อมสำหรับไฟนล์งาน');
         }
 
+        const activeDocType = data.activeApprovalDocType || data.docType || (data.completedCommandUrl || data.commandPdfUrl ? 'command' : (data.completedDispatchBookUrl || data.dispatchBookUrl || data.dispatchBookPdfUrl ? 'dispatch' : 'memo'));
+
         // 3. ดาวน์โหลดไฟล์จาก Firebase Storage
-        const firebaseUrl = data.currentPdfUrl || data.completedMemoUrl || data.pdfUrl;
+        const firebaseUrl = data.currentPdfUrl
+            || (activeDocType === 'command' ? (data.completedCommandUrl || data.commandPdfUrl) : '')
+            || (activeDocType === 'dispatch' ? (data.completedDispatchBookUrl || data.dispatchBookUrl || data.dispatchBookPdfUrl) : '')
+            || data.completedMemoUrl
+            || data.pdfUrl;
         if (!firebaseUrl) throw new Error('ไม่พบไฟล์ใน Firebase Storage');
 
         // 4. ย้ายไปเก็บที่ Google Drive (และลบออกจาก Firebase)
         const driveUrl = await archiveToGoogleDrive(
             firebaseUrl,
             data.username || 'admin',
-            `Final_Memo_${requestId.replace(/[\\/\\:\\.]/g, '-')}.pdf`
+            `${activeDocType === 'dispatch' ? 'Final_Dispatch' : (activeDocType === 'command' ? 'Final_Command' : 'Final_Memo')}_${requestId.replace(/[\\/\\:\\.]/g, '-')}.pdf`
         );
 
         // 5. อัปเดต Firestore
-        await db.collection('requests').doc(safeId).set({
-            completedMemoUrl: driveUrl,
-            pdfUrl: driveUrl,
+        const finalUpdate = {
             currentPdfUrl: '',      // ล้างออก (ลบจาก Firebase แล้ว)
             docStatus: 'สิ้นสุดกระบวนการ',
-            status: 'เสร็จสิ้น',
             finalizedAt: firebase.firestore.FieldValue.serverTimestamp(),
             lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
+        };
+        const gasPayload = {
+            requestId: requestId,
+            docStatus: 'สิ้นสุดกระบวนการ',
+        };
+
+        if (activeDocType === 'command') {
+            finalUpdate.completedCommandUrl = driveUrl;
+            finalUpdate.commandPdfUrl = driveUrl;
+            finalUpdate.commandStatus = 'เสร็จสิ้น';
+            gasPayload.completedCommandUrl = driveUrl;
+            gasPayload.commandPdfUrl = driveUrl;
+            gasPayload.commandStatus = 'เสร็จสิ้น';
+        } else if (activeDocType === 'dispatch') {
+            finalUpdate.completedDispatchBookUrl = driveUrl;
+            finalUpdate.dispatchBookUrl = driveUrl;
+            finalUpdate.dispatchBookPdfUrl = driveUrl;
+            finalUpdate.dispatchStatus = 'เสร็จสิ้น';
+            gasPayload.completedDispatchBookUrl = driveUrl;
+            gasPayload.dispatchBookUrl = driveUrl;
+            gasPayload.dispatchBookPdfUrl = driveUrl;
+            gasPayload.dispatchStatus = 'เสร็จสิ้น';
+        } else {
+            finalUpdate.completedMemoUrl = driveUrl;
+            finalUpdate.pdfUrl = driveUrl;
+            finalUpdate.status = 'เสร็จสิ้น';
+            gasPayload.completedMemoUrl = driveUrl;
+            gasPayload.status = 'เสร็จสิ้น';
+        }
+
+        await db.collection('requests').doc(safeId).set(finalUpdate, { merge: true });
 
         // 6. อัปเดต GAS Sheets
-        apiCall('POST', 'updateRequest', {
-            requestId: requestId,
-            completedMemoUrl: driveUrl,
-            docStatus: 'สิ้นสุดกระบวนการ',
-            status: 'เสร็จสิ้น',
-        }).catch(e => console.warn('GAS sync:', e));
+        apiCall('POST', 'updateRequest', gasPayload).catch(e => console.warn('GAS sync:', e));
 
-        showAlert('✅ สำเร็จ', 'ไฟนล์งานและส่งเก็บ Google Drive เรียบร้อยแล้ว');
+        const docLabel = activeDocType === 'dispatch' ? 'หนังสือส่ง' : (activeDocType === 'command' ? 'คำสั่งไปราชการ' : 'บันทึกข้อความ');
+        showAlert('✅ สำเร็จ', `ไฟนล์${docLabel}และส่งเก็บ Google Drive เรียบร้อยแล้ว`);
 
     } catch (error) {
         showAlert('ผิดพลาด', error.message);

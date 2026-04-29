@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
     
-    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/style.css?v=5">
 </head>
 <body class="p-4 sm:p-8 min-h-screen bg-gradient-to-br from-pink-100 to-blue-200 antialiased">
 
@@ -140,7 +140,7 @@
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="info-section">
-                    <h3 class="text-lg font-bold text-blue-700 mb-4">1. การขออนุญาตไปราชการ (เบิกค่าใช้จ่าย)</h3>
+                    <h3 class="text-lg font-bold text-sky-700 mb-4">1. การขออนุญาตไปราชการ (เบิกค่าใช้จ่าย)</h3>
                     <p class="font-medium mb-2">เอกสารที่ต้องเตรียม:</p>
                     <ul class="list-disc pl-5 mb-2">
                         <li>ร่างบันทึกข้อความ และกดส่งร่างข้อความในระบบ</li> 
@@ -160,7 +160,7 @@
                 </div>
                 
                 <div class="info-section">
-                    <h3 class="text-lg font-bold text-green-700 mb-4">2. การขออนุญาตไปราชการ (ไม่เบิกค่าใช้จ่าย)</h3>
+                    <h3 class="text-lg font-bold text-sky-700 mb-4">2. การขออนุญาตไปราชการ (ไม่เบิกค่าใช้จ่าย)</h3>
                     <p class="font-medium mb-2">เอกสารที่ต้องเตรียม:</p>
                     <ul class="list-disc pl-5 mb-2">
                         <li>ร่างบันทึกข้อความ กดส่งร่างข้อความในระบบ (อัพโหลดไฟล์ที่เซ็นเสร็จแล้ว)</li>
@@ -460,24 +460,6 @@
                                     <label for="form-department" class="form-label">กลุ่มสาระฯ / งาน</label>
                                     <select id="form-department" class="form-input" required>
                                         <option value="">-- เลือกกลุ่มสาระ/งาน --</option>
-                                        <option value="หัวหน้ากลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี">กลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี</option>
-                                        <option value="รองหัวหน้ากลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี">(รอง)กลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี</option>
-                                        <option value="หัวหน้ากลุ่มสาระการเรียนรู้คณิตศาสตร์">กลุ่มสาระการเรียนรู้คณิตศาสตร์</option>
-                                        <option value="หัวหน้ากลุ่มสาระการเรียนรู้ภาษาไทย">กลุ่มสาระการเรียนรู้ภาษาไทย</option>
-                                        <option value="หัวหน้ากลุ่มสาระการเรียนรู้ภาษาต่างประเทศ">กลุ่มสาระการเรียนรู้ภาษาต่างประเทศ</option>
-                                        <option value="หัวหน้ากลุ่มสาระการเรียนรู้สังคมศึกษา ศาสนา และวัฒนธรรม">กลุ่มสาระการเรียนรู้สังคมศึกษา ศาสนา และวัฒนธรรม</option>
-                                        <option value="หัวหน้ากลุ่มสาระการเรียนรู้สุขศึกษาและพลศึกษา">กลุ่มสาระการเรียนรู้สุขศึกษาและพลศึกษา</option>
-                                        <option value="หัวหน้ากลุ่มสาระการเรียนรู้ศิลปะ">กลุ่มสาระการเรียนรู้ศิลปะ</option>
-                                        <option value="หัวหน้ากลุ่มสาระการเรียนรู้การงานอาชีพ">กลุ่มสาระการเรียนรู้การงานอาชีพ</option>
-                                        <option value="รองผู้อำนวยการกลุ่มบริหารวิชาการ">รองผู้อำนวยการกลุ่มบริหารวิชาการ</option>
-                                    <option value="รองผู้อำนวยการกลุ่มบริหารงบประมาณ">รองผู้อำนวยการกลุ่มบริหารงบประมาณ</option>
-                                    <option value="รองผู้อำนวยการกลุ่มบริหารงานบุคคล">รองผู้อำนวยการกลุ่มบริหารงานบุคคล</option>
-                                    <option value="รองผู้อำนวยการกลุ่มบริหารทั่วไป">รองผู้อำนวยการกลุ่มบริหารทั่วไป</option>
-                                    <option value="หัวหน้ากลุ่มบริหารวิชาการ">หัวหน้ากลุ่มบริหารวิชาการ</option>
-                                    <option value="หัวหน้ากลุ่มบริหารงบประมาณ">หัวหน้ากลุ่มบริหารงบประมาณ</option>
-                                    <option value="หัวหน้ากลุ่มบริหารงานบุคคล">หัวหน้ากลุ่มบริหารงานบุคคล</option>
-                                    <option value="หัวหน้ากลุ่มบริหารทั่วไป">หัวหน้ากลุ่มบริหารทั่วไป</option>
-                                        <option value=".....................................">.....................................</option>
                                     </select>
                                 </div>
                                 <div><label for="form-head-name" class="form-label">ชื่อหัวหน้ากลุ่มสาระ / หัวหน้างาน</label><input type="text" id="form-head-name" class="form-input bg-gray-200" readonly></div>
@@ -700,24 +682,6 @@
                                 <label for="edit-department" class="form-label">กลุ่มสาระฯ / งาน</label>
                                 <select id="edit-department" class="form-input" required>
                                     <option value="">-- เลือกกลุ่มสาระ/งาน --</option>
-                                    <option value="หัวหน้ากลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี">กลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี</option>
-                                    <option value="รองหัวหน้ากลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี">(รอง)กลุ่มสาระการเรียนรู้วิทยาศาสตร์และเทคโนโลยี</option>
-                                    <option value="หัวหน้ากลุ่มสาระการเรียนรู้คณิตศาสตร์">กลุ่มสาระการเรียนรู้คณิตศาสตร์</option>
-                                    <option value="หัวหน้ากลุ่มสาระการเรียนรู้ภาษาไทย">กลุ่มสาระการเรียนรู้ภาษาไทย</option>
-                                    <option value="หัวหน้ากลุ่มสาระการเรียนรู้ภาษาต่างประเทศ">กลุ่มสาระการเรียนรู้ภาษาต่างประเทศ</option>
-                                    <option value="หัวหน้ากลุ่มสาระการเรียนรู้สังคมศึกษา ศาสนา และวัฒนธรรม">กลุ่มสาระการเรียนรู้สังคมศึกษา ศาสนา และวัฒนธรรม</option>
-                                    <option value="หัวหน้ากลุ่มสาระการเรียนรู้สุขศึกษาและพลศึกษา">กลุ่มสาระการเรียนรู้สุขศึกษาและพลศึกษา</option>
-                                    <option value="หัวหน้ากลุ่มสาระการเรียนรู้ศิลปะ">กลุ่มสาระการเรียนรู้ศิลปะ</option>
-                                    <option value="หัวหน้ากลุ่มสาระการเรียนรู้การงานอาชีพ">กลุ่มสาระการเรียนรู้การงานอาชีพ</option>
-                                    <option value="รองผู้อำนวยการกลุ่มบริหารวิชาการ">รองผู้อำนวยการกลุ่มบริหารวิชาการ</option>
-                                    <option value="รองผู้อำนวยการกลุ่มบริหารงบประมาณ">รองผู้อำนวยการกลุ่มบริหารงบประมาณ</option>
-                                    <option value="รองผู้อำนวยการกลุ่มบริหารงานบุคคล">รองผู้อำนวยการกลุ่มบริหารงานบุคคล</option>
-                                    <option value="รองผู้อำนวยการกลุ่มบริหารทั่วไป">รองผู้อำนวยการกลุ่มบริหารทั่วไป</option>
-                                    <option value="หัวหน้ากลุ่มบริหารวิชาการ">หัวหน้ากลุ่มบริหารวิชาการ</option>
-                                    <option value="หัวหน้ากลุ่มบริหารงบประมาณ">หัวหน้ากลุ่มบริหารงบประมาณ</option>
-                                    <option value="หัวหน้ากลุ่มบริหารงานบุคคล">หัวหน้ากลุ่มบริหารงานบุคคล</option>
-                                    <option value="หัวหน้ากลุ่มบริหารทั่วไป">หัวหน้ากลุ่มบริหารทั่วไป</option>
-                                    <option value=".....................................">.....................................</option>
                                 </select>
                             </div>
                             <div>
@@ -956,6 +920,7 @@
                         <strong>📌 วิธีใช้:</strong>
                         กดปุ่ม <span class="font-bold">"🔗 สร้างลิงก์"</span> สำหรับเอกสารที่ต้องการ
                         แล้วคัดลอกส่งให้ผู้ลงนามผ่าน <strong>Line / Email</strong><br>
+                        ระบบจะเตรียม <strong>ข้อความพร้อมส่ง</strong> ให้ด้วย โดยใส่เลขบันทึก/เรื่อง/ชื่อผู้ขอให้อัตโนมัติ<br>
                         ลิงก์ใช้ได้ <strong>ครั้งเดียวภายใน 7 วัน</strong> ผู้รับไม่ต้องเข้าสู่ระบบ
                     </div>
 
@@ -1413,7 +1378,7 @@
     </div>
             </main>
             
-            <footer class="text-center text-sm text-gray-500 py-4 border-t border-gray-200 mt-auto">
+            <footer class="app-shell-footer text-center text-sm text-gray-500 py-4 border-t border-gray-200 mt-auto">
                 <p>จัดทำโดยกลุ่มบริหารงานบุคคล โรงเรียนวังน้ำเย็นวิทยาคม </p>
                 <p>พัฒนาระบบโดย ครูกีรติ ประสพพรรังสี </p>
             </footer>
@@ -1801,6 +1766,25 @@
         <p class="text-sm font-bold text-green-700 flex items-center gap-2">✅ ระบบดึงบันทึกข้อความให้อัตโนมัติแล้ว</p>
         <a id="pre-signed-memo-link" href="#" target="_blank" class="text-xs text-blue-600 underline mt-1 block">📄 ดูเอกสารบันทึกข้อความ</a>
         <p class="text-xs text-gray-500 mt-1">ระบบจะรวมบันทึกนี้กับไฟล์แนบที่คุณเพิ่มโดยอัตโนมัติ</p>
+    </div>
+
+    <div id="memo-source-mode-container" class="mb-4 bg-white border border-sky-100 rounded-lg p-3 hidden">
+        <label class="form-label font-bold text-gray-800 flex items-center gap-2"><span>📄</span> แหล่งบันทึกข้อความ</label>
+        <div class="flex flex-wrap gap-2 mt-2">
+            <button type="button" id="memo-source-auto-btn" class="btn bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200">
+                ✅ ใช้บันทึกจากระบบ
+            </button>
+            <button type="button" id="memo-source-manual-btn" class="btn bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200">
+                ⬆️ อัปโหลดบันทึกเอง
+            </button>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">ค่าเริ่มต้นคือดึงบันทึกข้อความจากระบบอัตโนมัติ แต่หากยังไม่ได้เซ็นออนไลน์สามารถอัปโหลดไฟล์เองแทนได้</p>
+    </div>
+
+    <div id="memo-manual-upload-container" class="hidden mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4">
+        <label for="file-signed-memo" class="form-label text-sm font-bold text-amber-800">อัปโหลดบันทึกข้อความด้วยตัวเอง (PDF)</label>
+        <input type="file" id="file-signed-memo" class="form-input text-sm bg-white" accept=".pdf">
+        <p class="text-xs text-amber-700 mt-2">ระบบจะใช้ไฟล์นี้แทนบันทึกที่ดึงอัตโนมัติ และยังสามารถรวมกับเอกสารแนบอื่นได้ตามปกติ</p>
     </div>
 
     <div id="memo-workflow-mode-banner" class="hidden mb-4 p-3 rounded-lg border border-sky-200 bg-sky-50 text-sky-800 text-sm font-semibold"></div>
@@ -2192,12 +2176,12 @@
         <div id="saraban-command-panel" class="bg-gray-100 p-3 border-b flex-shrink-0">
             <div class="flex flex-wrap gap-3 items-end justify-center mb-2">
                 <div>
-                    <label class="block text-xs font-bold text-gray-600 mb-1">เลขที่หนังสือ/คำสั่ง:</label>
+                    <label id="saraban-doc-num-label" class="block text-xs font-bold text-gray-600 mb-1">เลขที่หนังสือ/คำสั่ง:</label>
                     <input type="text" id="saraban-doc-num" placeholder="เช่น 123"
                         class="input-field w-36 text-center text-lg font-bold">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-gray-600 mb-1">วันที่ออกเอกสาร:</label>
+                    <label id="saraban-doc-date-label" class="block text-xs font-bold text-gray-600 mb-1">วันที่ออกเอกสาร:</label>
                     <input type="text" id="saraban-doc-date" placeholder="เช่น 26 มีนาคม 2568"
                         class="input-field w-52 text-center text-lg font-bold">
                 </div>
@@ -2209,7 +2193,7 @@
 
         <!-- โหมดบันทึก: แค่ตรวจสอบ -->
         <div id="saraban-memo-panel" class="hidden bg-green-50 p-3 border-b flex-shrink-0">
-            <p class="text-green-800 font-bold text-center text-sm">📄 บันทึกข้อความ — ตรวจสอบเอกสารแล้วกดยืนยันส่งผู้อำนวยการ</p>
+            <p id="saraban-memo-panel-text" class="text-green-800 font-bold text-center text-sm">📄 บันทึกข้อความ — ตรวจสอบเอกสารแล้วกดยืนยันส่งผู้อำนวยการ</p>
         </div>
 
         <!-- พื้นที่ PDF -->
@@ -2340,10 +2324,10 @@
    <script src="../js/config.js?v=3"></script>          <script src="../js/utils.js?v=3"></script>
 <script src="../js/firebaseService.js?v=3"></script>  <script src="../js/auth.js?v=3"></script>
 <script src="../js/requests.js?v=4"></script>
-<script src="../js/admin.js?v=3"></script>
+<script src="../js/admin.js?v=4"></script>
 <script src="../js/stats.js?v=3"></script>
-<script src="../js/tokenSign.js?v=3"></script>
-<script src="../js/main.js?v=4"></script>
+<script src="../js/tokenSign.js?v=4"></script>
+<script src="../js/main.js?v=5"></script>
 <script src="../js/sarabun.js?v=3"></script>
 <script src="../js/signature.js?v=3"></script>
 

@@ -10,6 +10,87 @@ window._currentSignReqData   = null;
 window._tokenPdfUrl          = null;
 window._tokenPdfBytes        = null;
 
+function _escapeHtmlForTokenSign(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function _getApprovalOriginalId(docMeta = {}) {
+    return docMeta.id || docMeta.requestId || docMeta.refNumber || '';
+}
+
+function _getApprovalManagedDocType(docMeta = {}, currentStatus = '') {
+    if (currentStatus === 'waiting_admin_review' && docMeta.activeApprovalDocType !== 'command' && docMeta.activeApprovalDocType !== 'dispatch') {
+        return 'memo';
+    }
+    if (typeof getApprovalDocType === 'function') {
+        return getApprovalDocType({ ...docMeta, docStatus: currentStatus || docMeta.docStatus });
+    }
+    if (docMeta.activeApprovalDocType) return docMeta.activeApprovalDocType;
+    if (docMeta.docType === 'dispatch' || docMeta.completedDispatchBookUrl || docMeta.dispatchBookUrl || docMeta.dispatchBookPdfUrl) {
+        return 'dispatch';
+    }
+    if (docMeta.docType === 'command' || docMeta.completedCommandUrl || docMeta.commandPdfUrl || docMeta.commandBookUrl) {
+        return 'command';
+    }
+    return 'memo';
+}
+
+function _getApprovalDocTypeLabel(docType) {
+    if (docType === 'dispatch') return 'หนังสือส่ง';
+    if (docType === 'command') return 'คำสั่งไปราชการ';
+    return 'บันทึกข้อความ';
+}
+
+function _buildApprovalNotifyMessage(url, recipientLabel, docMeta = {}, currentStatus = '') {
+    const docType = _getApprovalManagedDocType(docMeta, currentStatus);
+    const requestId = _getApprovalOriginalId(docMeta);
+    const purpose = docMeta.purpose || docMeta.docTitle || 'เอกสารไปราชการ';
+    const requester = docMeta.requesterName || docMeta.requester || '-';
+    const docLabel = _getApprovalDocTypeLabel(docType);
+    const lines = [
+        `เรียน ${recipientLabel}`,
+        `มี${docLabel}รอดำเนินการ`
+    ];
+
+    if (docType === 'memo' && requestId) {
+        lines.push(`เลขบันทึก: ${requestId}`);
+    }
+    lines.push(`เรื่อง: ${purpose}`);
+    lines.push(`ชื่อผู้ขอ: ${requester}`);
+    lines.push(`ลิงก์ลงนาม: ${url}`);
+
+    return {
+        docType,
+        docLabel,
+        requestId,
+        message: lines.join('\n')
+    };
+}
+
+window.memoRequiresCommandBeforeSaraban = function(docMeta = {}, currentStatus = '') {
+    const docType = _getApprovalManagedDocType(docMeta, currentStatus);
+    if (docType !== 'memo') return false;
+    if (currentStatus && currentStatus !== 'waiting_admin_review') return false;
+    const hasCommand = !!(docMeta.completedCommandUrl || docMeta.commandPdfUrl || docMeta.commandBookUrl);
+    return !hasCommand;
+};
+
+function _showCommandRequiredAlert(docMeta = {}) {
+    const requestId = _getApprovalOriginalId(docMeta) || 'รายการนี้';
+    const purpose = docMeta.purpose || 'ไม่ระบุเรื่อง';
+    const message = `บันทึก "${requestId}" ยังไม่มีคำสั่งไปราชการ\n\nเรื่อง: ${purpose}\n\nกรุณาให้แอดมินสร้างคำสั่งก่อน แล้วจึงส่งต่อไปยังงานสารบรรณพร้อมกัน`;
+    if (typeof showAlert === 'function') {
+        showAlert('ต้องสร้างคำสั่งก่อน', message);
+    } else {
+        alert(message);
+    }
+}
+
 // --- 1. สร้าง Token ID แบบสุ่ม ---
 function _generateTokenId() {
     if (window.crypto && window.crypto.getRandomValues) {
@@ -47,17 +128,19 @@ async function generateApprovalToken(requestId, nextDocStatus, docMeta) {
 }
 
 // --- 3. แสดง Dialog สำหรับคัดลอก Link ---
-function showApprovalLinkDialog(url, recipientLabel) {
+function showApprovalLinkDialog(url, recipientLabel, docMeta = {}, currentStatus = '') {
     const existing = document.getElementById('approval-link-dialog');
     if (existing) existing.remove();
     if (!url) return;
 
-    const escaped = url.replace(/'/g, "\\'");
+    const notifyPayload = _buildApprovalNotifyMessage(url, recipientLabel, docMeta, currentStatus);
+    const escapedUrl = _escapeHtmlForTokenSign(url);
+    const escapedMsg = _escapeHtmlForTokenSign(notifyPayload.message);
     const html = `
     <div id="approval-link-dialog"
          class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[300]"
          onclick="if(event.target===this)this.remove()">
-      <div class="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl" onclick="event.stopPropagation()">
+      <div class="bg-white rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl" onclick="event.stopPropagation()">
         <div class="text-center mb-5">
           <div class="text-4xl mb-2">🔗</div>
           <h3 class="font-bold text-xl text-gray-800">ลิงก์ขั้นตอนถัดไป</h3>
@@ -67,7 +150,7 @@ function showApprovalLinkDialog(url, recipientLabel) {
           </p>
         </div>
         <div class="flex gap-2 mb-3">
-          <input type="text" id="_ald_url" value="${url}" readonly
+          <input type="text" id="_ald_url" value="${escapedUrl}" readonly
             class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 focus:outline-none"
             onclick="this.select()">
           <button id="_ald_btn"
@@ -89,6 +172,34 @@ function showApprovalLinkDialog(url, recipientLabel) {
             class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 whitespace-nowrap">
             📋 คัดลอก
           </button>
+        </div>
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-4">
+          <div class="flex items-center justify-between gap-3 mb-2">
+            <p class="text-sm font-bold text-slate-700">ข้อความพร้อมส่งแจ้ง</p>
+            <button id="_ald_msg_btn"
+              onclick="(function(){
+                var u = document.getElementById('_ald_message').value;
+                var b = document.getElementById('_ald_msg_btn');
+                if(navigator.clipboard){
+                  navigator.clipboard.writeText(u).then(function(){
+                    b.textContent='✅ คัดลอกข้อความแล้ว';
+                    b.className='bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap';
+                  });
+                } else {
+                  document.getElementById('_ald_message').select();
+                  document.execCommand('copy');
+                  b.textContent='✅ คัดลอกข้อความแล้ว';
+                  b.className='bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap';
+                }
+              })()"
+              class="bg-slate-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-800 whitespace-nowrap">
+              📨 คัดลอกข้อความ
+            </button>
+          </div>
+          <textarea id="_ald_message" readonly
+            class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white text-slate-700 focus:outline-none min-h-[140px]"
+            onclick="this.select()">${escapedMsg}</textarea>
+          <p class="text-xs text-slate-500 mt-2">ระบบใส่ข้อมูลเรื่องและชื่อผู้ขอให้แล้ว เพื่อให้ส่งต่อผ่าน Line หรือข้อความได้สะดวกขึ้น</p>
         </div>
         <p class="text-xs text-gray-400 text-center mb-4">
           ⚠️ ลิงก์ใช้ได้ครั้งเดียว ผู้รับไม่ต้องเข้าสู่ระบบ
@@ -308,17 +419,34 @@ async function handleTokenSignFlow(token) {
 
         } else if (td.docStatus === 'waiting_admin_review') {
             // แอดมิน: ไม่ต้องเซ็น แค่กด forward
-            contentEl.innerHTML = `
-              <div class="space-y-3">
-                <a href="${pdfUrl}" target="_blank"
-                  class="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl flex justify-center items-center gap-2 font-medium">
-                  📄 ดูเอกสาร PDF
-                </a>
-                <button onclick="tokenAdminForward()"
-                  class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex justify-center items-center gap-2 text-lg shadow-md">
-                  ✅ ตรวจสอบแล้ว ส่งไปงานสารบรรณ
-                </button>
-              </div>`;
+            if (typeof memoRequiresCommandBeforeSaraban === 'function' && memoRequiresCommandBeforeSaraban(req, td.docStatus)) {
+                contentEl.innerHTML = `
+                  <div class="space-y-3">
+                    <a href="${pdfUrl}" target="_blank"
+                      class="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl flex justify-center items-center gap-2 font-medium">
+                      📄 ดูเอกสาร PDF
+                    </a>
+                    <div class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-left">
+                      <p class="font-bold text-amber-900 mb-1">📝 ต้องสร้างคำสั่งไปราชการก่อน</p>
+                      <p class="text-sm text-amber-800 leading-relaxed">
+                        เรื่องนี้ยังไม่สามารถส่งไปงานสารบรรณได้ เพราะยังไม่มีไฟล์คำสั่งไปราชการ
+                        กรุณาให้แอดมินกลับเข้าในระบบหลักเพื่อสร้างคำสั่ง แล้วจึงส่งเรื่องนี้พร้อมกันอีกครั้ง
+                      </p>
+                    </div>
+                  </div>`;
+            } else {
+                contentEl.innerHTML = `
+                  <div class="space-y-3">
+                    <a href="${pdfUrl}" target="_blank"
+                      class="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl flex justify-center items-center gap-2 font-medium">
+                      📄 ดูเอกสาร PDF
+                    </a>
+                    <button onclick="tokenAdminForward()"
+                      class="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl flex justify-center items-center gap-2 text-lg shadow-md">
+                      ✅ ตรวจสอบแล้ว ส่งไปงานสารบรรณ
+                    </button>
+                  </div>`;
+            }
 
         } else {
             // ทุก role ที่ต้องเซ็น (หัวหน้า, รองบุคคล, รองวิชาการ, ผอ.)
@@ -358,6 +486,10 @@ async function tokenAdminForward() {
     const td  = window._currentSignTokenData;
     const req = window._currentSignReqData || {};
     if (!td) return;
+    if (typeof memoRequiresCommandBeforeSaraban === 'function' && memoRequiresCommandBeforeSaraban(req, td.docStatus)) {
+        _showCommandRequiredAlert(req);
+        return;
+    }
     try {
         showAlert('กำลังดำเนินการ', 'กำลังส่งเอกสารไปงานสารบรรณ...', false);
         if (typeof db !== 'undefined') {
@@ -426,6 +558,8 @@ async function loadApprovalLinkManagement() {
             snap.docs.forEach(doc => {
                 const data = doc.data();
                 window._adminApprovalDocs[doc.id] = data;
+                if (data.id) window._adminApprovalDocs[data.id] = data;
+                if (data.requestId) window._adminApprovalDocs[data.requestId] = data;
                 allDocs.push({ id: doc.id, ...data });
             });
         });
@@ -509,21 +643,40 @@ async function loadApprovalLinkManagement() {
                 const requester = (doc.requesterName || '-').replace(/&/g,'&amp;').replace(/</g,'&lt;');
                 const date      = doc.startDate || doc.date || '-';
                 const docId     = doc.id; // safeId — ไม่มี special chars
+                const docType   = _getApprovalManagedDocType(doc, status);
+                const docLabel  = _getApprovalDocTypeLabel(docType);
+                const needsCommandFirst = typeof memoRequiresCommandBeforeSaraban === 'function'
+                    && memoRequiresCommandBeforeSaraban(doc, status);
+                const escapedDocId = String(docId || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const buttonDomId = `alm-btn-${String(docId || '').replace(/[^A-Za-z0-9_-]/g, '_')}`;
+                const typeBadgeCls = docType === 'dispatch'
+                    ? 'bg-rose-100 text-rose-700'
+                    : (docType === 'command' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700');
 
                 html += `
                 <div class="bg-white rounded-lg border border-gray-200 p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                   <div class="flex-1 min-w-0">
+                    <div class="flex flex-wrap items-center gap-2 mb-1">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${typeBadgeCls}">${docLabel}</span>
+                      ${needsCommandFirst ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">ต้องสร้างคำสั่งก่อนส่งสารบรรณ</span>' : ''}
+                    </div>
                     <p class="font-medium text-gray-800 text-sm truncate">${purpose}</p>
                     <p class="text-xs text-gray-500 mt-0.5">ผู้ขอ: ${requester} &nbsp;|&nbsp; วันที่: ${date}</p>
                   </div>
                   <div class="flex flex-col sm:flex-row gap-1.5 flex-shrink-0">
-                    <button id="alm-btn-${docId}"
-                      onclick="adminGenerateLink(this, '${docId}', '${status}')"
+                    ${needsCommandFirst ? `
+                    <button
+                      onclick="openAdminGenerateCommand('${escapedDocId}')"
+                      class="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap">
+                      📝 สร้างคำสั่งก่อน
+                    </button>` : `
+                    <button id="${buttonDomId}"
+                      onclick="adminGenerateLink(this, '${escapedDocId}', '${status}')"
                       class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors">
                       🔗 สร้างลิงก์ส่งให้
-                    </button>
+                    </button>`}
                     ${status !== 'waiting_admin_review' ? `<button
-                      onclick="adminSkipStep('${docId}', '${status}')"
+                      onclick="adminSkipStep('${escapedDocId}', '${status}')"
                       class="w-full sm:w-auto px-3 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap">
                       ⏭️ ข้ามขั้นตอนนี้
                     </button>` : ''}
@@ -557,12 +710,19 @@ async function adminGenerateLink(btn, requestId, docStatus) {
 
     try {
         const docMeta = window._adminApprovalDocs[requestId] || {};
+        if (typeof memoRequiresCommandBeforeSaraban === 'function' && memoRequiresCommandBeforeSaraban(docMeta, docStatus)) {
+            _showCommandRequiredAlert(docMeta);
+            btn.disabled  = false;
+            btn.innerHTML = origHTML;
+            btn.className = origClass;
+            return;
+        }
         const url     = await generateApprovalToken(requestId, docStatus, docMeta);
         if (!url) throw new Error('ไม่สามารถสร้างลิงก์ได้ กรุณาตรวจสอบการเชื่อมต่อ');
 
         const label = (typeof getDocStatusLabel === 'function')
             ? getDocStatusLabel(docStatus) : docStatus;
-        showApprovalLinkDialog(url, label);
+        showApprovalLinkDialog(url, label, docMeta, docStatus);
 
         btn.innerHTML = '✅ สร้างลิงก์แล้ว';
         btn.className = 'flex-shrink-0 w-full sm:w-auto px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1.5';

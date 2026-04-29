@@ -616,6 +616,34 @@ function applyMemoUploadRequirementLabels() {
     }
 }
 
+function applyMemoSourceModeUI() {
+    const sourceMode = window._memoSourceMode || 'auto';
+    const sourceContainer = document.getElementById('memo-source-mode-container');
+    const preSignedDisplay = document.getElementById('pre-signed-memo-display');
+    const manualContainer = document.getElementById('memo-manual-upload-container');
+    const autoBtn = document.getElementById('memo-source-auto-btn');
+    const manualBtn = document.getElementById('memo-source-manual-btn');
+    const manualInput = document.getElementById('file-signed-memo');
+    const isUploadMode = (document.querySelector('input[name="modal_memo_type"]:checked')?.value || 'non_reimburse') !== 'reimburse'
+        || isUnifiedMemoUploadEnabled();
+
+    if (sourceContainer) sourceContainer.classList.toggle('hidden', !isUploadMode);
+    if (preSignedDisplay) preSignedDisplay.classList.toggle('hidden', !isUploadMode || sourceMode !== 'auto' || !document.getElementById('pre-signed-memo-url')?.value);
+    if (manualContainer) manualContainer.classList.toggle('hidden', !isUploadMode || sourceMode !== 'manual');
+
+    if (autoBtn) {
+        autoBtn.className = sourceMode === 'auto'
+            ? 'btn bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200'
+            : 'btn bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200';
+    }
+    if (manualBtn) {
+        manualBtn.className = sourceMode === 'manual'
+            ? 'btn bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-200'
+            : 'btn bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200';
+    }
+    if (manualInput) manualInput.required = isUploadMode && sourceMode === 'manual';
+}
+
 function applyMemoWorkflowModeUI() {
     const forceUploadMode = isUnifiedMemoUploadEnabled();
     const memoTypeContainer = document.getElementById('modal-memo-type-container');
@@ -665,6 +693,7 @@ function applyMemoWorkflowModeUI() {
     if (oldFileContainer) oldFileContainer.classList.add('hidden');
 
     applyMemoUploadRequirementLabels();
+    applyMemoSourceModeUI();
     updateSystemWorkflowSettingsPreview(forceUploadMode);
 }
 
@@ -1038,6 +1067,7 @@ document.getElementById('edit-user-cancel')?.addEventListener('click', () => { d
     });
     document.getElementById('save-workflow-settings-btn')?.addEventListener('click', saveSystemWorkflowSettings);
     applyMemoWorkflowModeUI();
+    if (typeof refreshSignerPositionOptions === 'function') refreshSignerPositionOptions();
     
     document.querySelectorAll('input[name="vehicle_option"]').forEach(checkbox => {checkbox.addEventListener('change', toggleVehicleDetails);});
     
@@ -1046,9 +1076,22 @@ document.getElementById('edit-user-cancel')?.addEventListener('click', () => { d
     document.getElementById('show-password-toggle')?.addEventListener('change', togglePasswordVisibility);
     
     document.getElementById('form-department')?.addEventListener('change', (e) => {
-        const selectedPosition = e.target.value;
-        const headNameInput = document.getElementById('form-head-name');
-        if(headNameInput) headNameInput.value = specialPositionMap[selectedPosition] || '';
+        if (typeof syncSignerHeadName === 'function') {
+            syncSignerHeadName('form-department', 'form-head-name');
+        } else {
+            const selectedPosition = e.target.value;
+            const headNameInput = document.getElementById('form-head-name');
+            if(headNameInput) headNameInput.value = specialPositionMap[selectedPosition] || '';
+        }
+    });
+
+    document.getElementById('memo-source-auto-btn')?.addEventListener('click', () => {
+        window._memoSourceMode = 'auto';
+        applyMemoSourceModeUI();
+    });
+    document.getElementById('memo-source-manual-btn')?.addEventListener('click', () => {
+        window._memoSourceMode = 'manual';
+        applyMemoSourceModeUI();
     });
 
     const searchInput = document.getElementById('search-requests');
@@ -1647,6 +1690,34 @@ async function getApprovalDocsFallback(targetStatus) {
 }
 
 // 1. ฟังก์ชันโหลดรายการเอกสารที่รอเซ็น
+function getApprovalDocType(req = {}) {
+    const activeType = req.activeApprovalDocType || req.docType || '';
+    const hasDispatch = !!(req.completedDispatchBookUrl || req.dispatchBookUrl || req.dispatchBookPdfUrl);
+    const hasCommand = !!(req.completedCommandUrl || req.commandPdfUrl);
+
+    if (activeType === 'dispatch') return 'dispatch';
+    if (activeType === 'command') return 'command';
+    if (activeType === 'memo') return 'memo';
+
+    if (req.docType === 'dispatch') return 'dispatch';
+    if (req.docType === 'command') return 'command';
+
+    if (hasDispatch && !hasCommand) return 'dispatch';
+    if (hasCommand) return 'command';
+    return 'memo';
+}
+
+function getApprovalPdfUrl(req = {}) {
+    const docType = getApprovalDocType(req);
+    if (docType === 'dispatch') {
+        return req.currentPdfUrl || req.completedDispatchBookUrl || req.dispatchBookUrl || req.dispatchBookPdfUrl || req.pdfUrl || '';
+    }
+    if (docType === 'command') {
+        return req.currentPdfUrl || req.completedCommandUrl || req.commandPdfUrl || req.pdfUrl || '';
+    }
+    return req.currentPdfUrl || req.completedMemoUrl || req.pdfUrl || req.memoPdfUrl || '';
+}
+
 async function loadPendingApprovals() {
     const user = getCurrentUser();
     if (!user) return;
@@ -1734,11 +1805,13 @@ async function loadPendingApprovals() {
             return tB - tA; // ล่าสุดก่อน
         });
 
-        // สารบรรณ: แยก 2 ตาราง (คำสั่ง / บันทึกข้อความ)
+        // สารบรรณ: แยกตามประเภทงานเพื่อให้หยิบงานได้ง่าย
         if (user.role === 'saraban') {
-            const cmdDocs  = docs.filter(d => d.docType === 'command' || !!d.commandPdfUrl);
-            const memoDocs = docs.filter(d => d.docType !== 'command' && !d.commandPdfUrl);
+            const dispatchDocs = docs.filter(d => getApprovalDocType(d) === 'dispatch');
+            const cmdDocs  = docs.filter(d => getApprovalDocType(d) === 'command');
+            const memoDocs = docs.filter(d => getApprovalDocType(d) === 'memo');
             container.innerHTML =
+                _renderApprovalTable(dispatchDocs, user, '📦 หนังสือส่ง', 'rose') +
                 _renderApprovalTable(cmdDocs,  user, '📝 คำสั่งไปราชการ',  'indigo') +
                 _renderApprovalTable(memoDocs, user, '📄 บันทึกข้อความ',   'teal');
         } else {
@@ -1822,10 +1895,11 @@ function _renderApprovalTable(docs, user, title, color) {
 
     let rows = '';
     docs.forEach((req, idx) => {
-        const pdfUrl  = req.completedMemoUrl || req.pdfUrl || req.memoPdfUrl || req.currentPdfUrl || req.commandPdfUrl || '';
+        const docType = getApprovalDocType(req);
+        const pdfUrl  = getApprovalPdfUrl(req);
         const dateStr = req.timestamp ? formatDisplayDate(req.timestamp) : '-';
-        const isCmd   = (req.docType === 'command') || !!req.commandPdfUrl;
         const docId   = req.docId;
+        const requiresSarabanNumber = docType === 'command' || docType === 'dispatch';
 
         // --- ปุ่มดำเนินการ ---
         // ปุ่มส่งกลับ (ใช้ร่วมทุก role)
@@ -1845,8 +1919,8 @@ function _renderApprovalTable(docs, user, title, color) {
                             📄 ดู PDF
                         </a>` : ''}
                         <button onclick="openSarabanForApproval('${docId}')"
-                            class="px-2 py-1 ${isCmd ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-green-600 hover:bg-green-700'} text-white rounded text-xs font-medium whitespace-nowrap">
-                            ${isCmd ? '📝 ออกเลขที่' : '✅ ส่งต่อ'}
+                            class="px-2 py-1 ${docType === 'dispatch' ? 'bg-rose-500 hover:bg-rose-600' : (docType === 'command' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-green-600 hover:bg-green-700')} text-white rounded text-xs font-medium whitespace-nowrap">
+                            ${docType === 'dispatch' ? '📦 ออกเลขหนังสือส่ง' : (docType === 'command' ? '📝 ออกเลขคำสั่ง' : '✅ ส่งต่อ')}
                         </button>
                     </div>
                     ${rejectBtn}
@@ -1896,8 +1970,8 @@ function _renderApprovalTable(docs, user, title, color) {
         // --- สถานะ ---
         let statusBadge = '';
         if (user.role === 'saraban') {
-            statusBadge = isCmd
-                ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">🟠 รอออกเลขที่</span>`
+            statusBadge = requiresSarabanNumber
+                ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-bold rounded-full">${docType === 'dispatch' ? '🟠 รอออกเลขหนังสือส่ง' : '🟠 รอออกเลขคำสั่ง'}</span>`
                 : `<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-teal-100 text-teal-700 text-xs font-bold rounded-full">🟡 รอตรวจสอบ</span>`;
         } else if (user.role === 'admin') {
             if (req.wasRejected) {
@@ -1923,9 +1997,12 @@ function _renderApprovalTable(docs, user, title, color) {
         }
 
         // ป้ายประเภทเอกสาร
-        const typeBadge = isCmd
-            ? `<span class="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded">คำสั่ง</span>`
-            : `<span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded">บันทึก</span>`;
+        let typeBadge = `<span class="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded">บันทึก</span>`;
+        if (docType === 'command') {
+            typeBadge = `<span class="px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs font-bold rounded">คำสั่ง</span>`;
+        } else if (docType === 'dispatch') {
+            typeBadge = `<span class="px-1.5 py-0.5 bg-rose-100 text-rose-700 text-xs font-bold rounded">หนังสือส่ง</span>`;
+        }
 
         rows += `
             <tr class="hover:bg-indigo-50/30 transition-colors">
@@ -1999,9 +2076,9 @@ function getTargetStatusForUser(role) {
 // 3. ฟังก์ชันเมื่อกดปุ่ม "เปิดอ่านและลงนาม" (อ่านข้อมูลจาก cache _approvalDocs)
 function openApprovalDocument(docId) {
     const data = window._approvalDocs?.[docId] || {};
-    // ใช้ไฟล์รวมทุกเอกสาร (completedMemoUrl) ก่อน เพื่อให้เห็นทั้งบันทึกและไฟล์แนบในไฟล์เดียว
-    const pdfUrl = data.completedMemoUrl || data.pdfUrl || data.memoPdfUrl || data.currentPdfUrl || '';
+    const pdfUrl = getApprovalPdfUrl(data);
     const currentDocStatus = data.docStatus || null;
+    const docType = getApprovalDocType(data);
     // ใช้ original ID (มี /) เพื่อให้ GAS หาเอกสารเจอ — docId คือ safeId (มี -)
     const origId = data.id || data.requestId || docId;
 
@@ -2009,7 +2086,10 @@ function openApprovalDocument(docId) {
         alert("ไม่พบไฟล์ PDF ในระบบ กรุณาติดต่อแอดมิน");
         return;
     }
-    openSignatureSystem(pdfUrl, origId, "✍️ ลงนามเอกสาร", currentDocStatus);
+    const title = docType === 'dispatch'
+        ? '✍️ ลงนามหนังสือส่ง'
+        : (docType === 'command' ? '✍️ ลงนามคำสั่งไปราชการ' : '✍️ ลงนามเอกสาร');
+    openSignatureSystem(pdfUrl, origId, title, currentDocStatus);
 }
 
 // 4. แอดมินตรวจสอบแล้ว → ส่งต่อให้งานสารบรรณ (ไม่ต้องเซ็น)
@@ -2338,9 +2418,8 @@ async function rejectDocument(docId) {
 // 6. สารบรรณ: โหลด PDF แล้วเปิดระบบออกเลขที่
 async function openSarabanForApproval(docId) {
     const data    = window._approvalDocs?.[docId] || {};
-    const pdfUrl  = data.pdfUrl || data.memoPdfUrl || data.currentPdfUrl || data.commandPdfUrl || '';
-    // ตรวจสอบ docType: ถ้าเป็น command จะออกเลขที่+วันที่, ถ้าเป็น memo จะตรวจสอบแล้วส่งต่อ
-    const docType = data.docType || (data.commandPdfUrl ? 'command' : 'memo');
+    const pdfUrl  = getApprovalPdfUrl(data);
+    const docType = getApprovalDocType(data);
 
     if (!pdfUrl) {
         alert("ไม่พบไฟล์ PDF ในระบบ กรุณาติดต่อแอดมิน");
@@ -2820,6 +2899,7 @@ async function saveHeadsConfig() {
 
         // อัปเดต specialPositionMap ในหน่วยความจำทันที
         Object.assign(specialPositionMap, names);
+        if (typeof refreshSignerPositionOptions === 'function') refreshSignerPositionOptions();
 
         // อัปเดต role ของ user ใน Firestore ตาม username ที่ assign
         if (typeof db !== 'undefined' && typeof POSITION_TO_ROLE !== 'undefined') {
@@ -3023,6 +3103,24 @@ window.confirmAdminRoute = async function() {
     const user      = getCurrentUser();
     const docMeta   = window._approvalDocs?.[docId] || {};
     const origDocId = docMeta.id || docMeta.requestId || docId;
+
+    if (
+        targetStatus === 'waiting_saraban' &&
+        typeof memoRequiresCommandBeforeSaraban === 'function' &&
+        memoRequiresCommandBeforeSaraban(docMeta, docMeta.docStatus || '')
+    ) {
+        const requestLabel = origDocId || docId;
+        const purpose = docMeta.purpose || 'ไม่ระบุเรื่อง';
+        if (typeof showAlert === 'function') {
+            showAlert(
+                'ต้องสร้างคำสั่งก่อน',
+                `บันทึก "${requestLabel}" ยังไม่มีคำสั่งไปราชการ\n\nเรื่อง: ${purpose}\n\nกรุณาให้แอดมินสร้างคำสั่งก่อน แล้วจึงส่งเรื่องไปงานสารบรรณพร้อมกัน`
+            );
+        } else {
+            alert(`บันทึก "${requestLabel}" ยังไม่มีคำสั่งไปราชการ\n\nเรื่อง: ${purpose}\n\nกรุณาให้แอดมินสร้างคำสั่งก่อน แล้วจึงส่งเรื่องไปงานสารบรรณพร้อมกัน`);
+        }
+        return;
+    }
 
     if (!confirm(`ยืนยันส่งเอกสาร:\n"${origDocId}"\n\n→ ${targetLabel}`)) return;
 
