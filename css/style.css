@@ -1085,12 +1085,17 @@ div#admin-requests-list > div:hover {
 /* ── Enhanced Data Table ── */
 .table-wrapper {
     border-radius: 1rem;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     border: 1px solid #e2e8f0;
     box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pinch-zoom;
 }
 .data-table {
-    width: 100%;
+    width: max-content;
+    min-width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
     table-layout: auto;
@@ -1136,6 +1141,29 @@ div#admin-requests-list > div:hover {
 /* Last column min-width */
 .data-table th:last-child,
 .data-table td:last-child { min-width: 120px; }
+
+#requests-table-wrapper .data-table {
+    min-width: 780px;
+}
+
+#admin-requests-view .data-table {
+    min-width: 1120px;
+}
+
+#admin-memos-view .data-table {
+    min-width: 920px;
+}
+
+.overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x pinch-zoom;
+}
+
+.overflow-x-auto > table {
+    width: max-content;
+    min-width: 100%;
+}
 
 /* ── Status Badge Improvements ── */
 /* ทุก inline badge ใน table ให้มีขนาด/น้ำหนักที่สม่ำเสมอ */

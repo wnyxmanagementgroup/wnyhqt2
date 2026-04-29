@@ -215,6 +215,8 @@ async function fetchAllMemos() {
                     purpose:          memo.purpose          || fb.purpose          || fb.subject       || '',
                     requesterName:    memo.requesterName    || fb.requesterName    || memo.submittedBy || '',
                     location:         memo.location         || fb.location         || '',
+                    province:         memo.province         || fb.province         || '',
+                    docDate:          memo.docDate          || fb.docDate          || '',
                     startDate:        memo.startDate        || fb.startDate        || '',
                     endDate:          memo.endDate          || fb.endDate          || '',
                     attendees:        memo.attendees        || fb.attendees        || [],
@@ -1603,7 +1605,7 @@ function renderAdminMemosList(memos) {
         const safeId         = refId;
         const displayName    = escapeHtml(memo.requesterName || memo.submittedBy || '-');
         const displayPurpose = escapeHtml(memo.purpose || '-');
-        const displayLocation = escapeHtml(memo.location || '');
+        const displayLocation = escapeHtml(memo.location || (memo.province ? getStoredProvinceValue(memo.province) : ''));
 
         // วันที่
         let dateRange = '-';
@@ -1611,6 +1613,8 @@ function renderAdminMemosList(memos) {
             const s = formatDisplayDate(memo.startDate);
             const e = formatDisplayDate(memo.endDate);
             dateRange = s === e ? s : `${s}<br><span class="text-gray-400">– ${e}</span>`;
+        } else if (memo.docDate) {
+            dateRange = formatDisplayDate(memo.docDate);
         }
 
         // สถานะ badge
