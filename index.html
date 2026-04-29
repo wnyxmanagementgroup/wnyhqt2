@@ -5,9 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WNY App — ระบบขออนุญาตไปราชการ โรงเรียนวังน้ำเย็นวิทยาคม</title>
 <link rel="icon" href="https://upload.wikimedia.org/wikipedia/commons/1/15/Wny-logo.png">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./assets/pwa/apple-touch-icon.png">
+<meta name="theme-color" content="#e0f2fe">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="WNY App">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./css/pwa.css?v=1">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -333,5 +340,6 @@ footer {
 const yearEl = document.getElementById('yr');
 if (yearEl) yearEl.textContent = new Date().getFullYear() + 543;
 </script>
+<script src="./js/pwa.js?v=1"></script>
 </body>
 </html>
