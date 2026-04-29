@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wny-pwa-shell-v1';
+const CACHE_NAME = 'wny-pwa-shell-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -8,20 +8,20 @@ const APP_SHELL = [
   './archive/index.html',
   './offline.html',
   './manifest.webmanifest',
-  './css/style.css?v=5',
-  './css/pwa.css?v=1',
+  './css/style.css?v=6',
+  './css/pwa.css?v=2',
   './js/config.js?v=3',
   './js/utils.js?v=3',
   './js/firebaseService.js?v=3',
   './js/auth.js?v=3',
   './js/requests.js?v=4',
-  './js/admin.js?v=4',
+  './js/admin.js?v=5',
   './js/stats.js?v=3',
   './js/tokenSign.js?v=4',
-  './js/main.js?v=5',
+  './js/main.js?v=6',
   './js/sarabun.js?v=3',
   './js/signature.js?v=3',
-  './js/pwa.js?v=1',
+  './js/pwa.js?v=2',
   './assets/pwa/icon-192.png',
   './assets/pwa/icon-512.png',
   './assets/pwa/apple-touch-icon.png'

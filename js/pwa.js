@@ -153,7 +153,10 @@
         if (!isAllowedContext) return;
 
         try {
-            await navigator.serviceWorker.register(PAGE_SCOPE + 'sw.js', { scope: PAGE_SCOPE });
+            const registration = await navigator.serviceWorker.register(PAGE_SCOPE + 'sw.js', { scope: PAGE_SCOPE });
+            if (registration && typeof registration.update === 'function') {
+                void registration.update();
+            }
         } catch (error) {
             console.warn('PWA service worker registration failed:', error);
         }
