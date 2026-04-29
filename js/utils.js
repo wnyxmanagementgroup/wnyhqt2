@@ -186,7 +186,7 @@ function renderInlineLoader(message = 'กำลังโหลดข้อม�
 }
 
 const DEFAULT_SIGNATURE_PAD_OPTIONS = Object.freeze({
-    penColor: '#0f172a',
+    penColor: '#1f4ba8',
     minWidth: 0.7,
     maxWidth: 2.1,
     throttle: 8,
