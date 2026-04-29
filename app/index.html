@@ -486,9 +486,9 @@
                                         <span>✍️</span> ลงลายมือชื่อผู้ขอ (ไม่บังคับ)
                                     </label>
                                     <p class="text-xs text-gray-500 mb-2">เซ็นชื่อในกรอบด้านล่าง ระบบจะนำไปประทับบนเอกสารให้อัตโนมัติ</p>
-                                    <div class="mx-auto" style="touch-action: none; width: 300px; max-width: 100%;">
-                                        <div class="border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 overflow-hidden" style="position: relative; padding-top: 100%;">
-                                            <canvas id="form-sig-canvas" class="cursor-crosshair" style="position:absolute; top:0; left:0; width:100%; height:100%; display:block;"></canvas>
+                                    <div class="signature-pad-shell">
+                                        <div class="signature-pad-frame">
+                                            <canvas id="form-sig-canvas"></canvas>
                                         </div>
                                     </div>
                                     <button type="button" id="form-sig-clear-btn" class="mt-2 text-xs text-gray-500 hover:text-red-500 underline">ล้างลายเซ็น</button>
@@ -734,9 +734,9 @@
                                 <img id="edit-existing-sig-img" src="" class="h-8 border rounded bg-white">
                                 <span class="text-xs text-gray-500">(วาดใหม่เพื่อเปลี่ยน หรือปล่อยว่างเพื่อใช้ลายเซ็นเดิม)</span>
                             </div>
-                            <div class="mx-auto" style="touch-action: none; width: 300px; max-width: 100%;">
-                                <div class="border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 overflow-hidden" style="position: relative; padding-top: 100%;">
-                                    <canvas id="edit-sig-canvas" class="cursor-crosshair" style="position:absolute; top:0; left:0; width:100%; height:100%; display:block;"></canvas>
+                            <div class="signature-pad-shell">
+                                <div class="signature-pad-frame">
+                                    <canvas id="edit-sig-canvas"></canvas>
                                 </div>
                             </div>
                             <button type="button" id="edit-sig-clear-btn" class="mt-2 text-xs text-gray-500 hover:text-red-500 underline">ล้างลายเซ็น</button>
@@ -1750,9 +1750,9 @@
     <div class="bg-white p-6 rounded-xl shadow-2xl text-center w-[95%] max-w-[560px]">
         <h3 class="text-lg font-bold mb-2 text-gray-800 flex items-center justify-center gap-2"><span>✍️</span> กรุณาเซ็นชื่อของคุณ</h3>
         <p class="text-sm text-gray-500 mb-4">ใช้นิ้ว ปากกา หรือเมาส์ เซ็นลงในกรอบด้านล่าง (กรอบนี้แสดงสัดส่วนเท่ากับลายเซ็นในเอกสาร)</p>
-        <div class="mx-auto mb-4" style="touch-action: none; width: 300px; max-width: 100%;">
-            <div class="border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 overflow-hidden" style="position: relative; padding-top: 100%;">
-                <canvas id="requester-draw-canvas" class="cursor-crosshair" style="position:absolute; top:0; left:0; width:100%; height:100%; display:block;"></canvas>
+        <div class="signature-pad-shell mb-4">
+            <div class="signature-pad-frame">
+                <canvas id="requester-draw-canvas"></canvas>
             </div>
         </div>
         <div class="flex justify-between gap-2">
@@ -2436,9 +2436,9 @@
 
         <div style="margin-bottom:18px; border:1px solid #d1fae5; background:#f0fdf4; border-radius:12px; padding:14px;">
           <div style="font-size:0.9rem; font-weight:700; color:#065f46; margin-bottom:8px;">✍️ ลายเซ็นครูผู้ควบคุม / ผู้ขอ</div>
-          <div style="position:relative; width:280px; max-width:100%; margin:0 auto;">
-            <div style="position:relative; padding-top:55%; border:2px dashed #a7f3d0; border-radius:10px; background:#fff; overflow:hidden;">
-              <canvas id="ts-signature-canvas" style="position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; cursor:crosshair;"></canvas>
+          <div class="signature-pad-shell" style="width:min(100%, 420px);">
+            <div class="signature-pad-frame" style="background:#fff; border-color:#a7f3d0;">
+              <canvas id="ts-signature-canvas"></canvas>
             </div>
           </div>
           <button type="button" onclick="clearTravelScheduleSignature()" style="display:block; margin:8px auto 0; background:none; border:none; color:#6b7280; font-size:0.78rem; text-decoration:underline; cursor:pointer;">ล้างลายเซ็น</button>

@@ -2549,10 +2549,12 @@ let _reqDrawPadInstance = null;
 function initFormSignaturePad() {
     const canvas = document.getElementById('form-sig-canvas');
     if (!canvas) return;
-    const side = canvas.offsetWidth || 280;
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width || canvas.offsetWidth || 460;
+    const height = rect.height || canvas.offsetHeight || 188;
     const result = createSignaturePad(canvas, requesterSignaturePad, {
-        width: side,
-        height: side
+        width,
+        height
     });
     if (!result) return;
     requesterSignaturePad = result.pad;
@@ -2563,10 +2565,12 @@ function initFormSignaturePad() {
 function initEditSignaturePad() {
     const canvas = document.getElementById('edit-sig-canvas');
     if (!canvas) return;
-    const side = canvas.offsetWidth || 280;
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width || canvas.offsetWidth || 460;
+    const height = rect.height || canvas.offsetHeight || 188;
     const result = createSignaturePad(canvas, editSignaturePad, {
-        width: side,
-        height: side
+        width,
+        height
     });
     if (!result) return;
     editSignaturePad = result.pad;
@@ -2586,10 +2590,12 @@ function openRequesterDrawSigModal() {
     modal.classList.remove('hidden');
 
     const canvas = document.getElementById('requester-draw-canvas');
-    const side = canvas.offsetWidth || 280;
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width || canvas.offsetWidth || 460;
+    const height = rect.height || canvas.offsetHeight || 188;
     const result = createSignaturePad(canvas, _reqDrawPadInstance, {
-        width: side,
-        height: side
+        width,
+        height
     });
     if (!result) return;
     _reqDrawPadInstance = result.pad;
