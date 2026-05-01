@@ -58,6 +58,9 @@ function doGet(e) {
       case "getAllDraftRequests":
         data = getAllDraftRequests();
         break;
+      case "getApprovalLinkToken":
+        data = getApprovalLinkToken(params.token);
+        break;
 
       // ★★★ เพิ่มส่วนนี้ (สำหรับดึงข้อมูลย้อนหลัง) ★★★
       case "getRequestsByYear":
@@ -207,6 +210,12 @@ function doPost(e) {
       case "generateDispatch":
         result = generateDispatch(payload);
         break;
+      case "createApprovalLinkToken":
+        result = createApprovalLinkToken(payload);
+        break;
+      case "markApprovalLinkTokenUsed":
+        result = markApprovalLinkTokenUsed(payload);
+        break;
 
       // --- System ---
       case "doSystemBackup":
@@ -249,6 +258,97 @@ function createJsonResponse(responseObject) {
   return ContentService.createTextOutput(
     JSON.stringify(responseObject),
   ).setMimeType(ContentService.MimeType.JSON);
+}
+
+const APPROVAL_LINK_PROPERTY_PREFIX = "approval_link:";
+
+function _getApprovalLinkPropertyKey_(token) {
+  return `${APPROVAL_LINK_PROPERTY_PREFIX}${String(token || "").trim()}`;
+}
+
+function _safeParseApprovalLinkRecord_(rawValue) {
+  if (!rawValue) return null;
+  try {
+    return JSON.parse(rawValue);
+  } catch (e) {
+    return null;
+  }
+}
+
+function createApprovalLinkToken(payload) {
+  const token = String(payload?.token || Utilities.getUuid().replace(/-/g, "")).trim();
+  const requestId = String(payload?.requestId || "").trim();
+  const docStatus = String(payload?.docStatus || "").trim();
+  if (!token || !requestId || !docStatus) {
+    return { status: "error", message: "ข้อมูลลิงก์ลงนามไม่ครบถ้วน" };
+  }
+
+  const safeId = String(payload?.safeId || requestId).replace(/[\/\\:\.]/g, "-");
+  const now = Date.now();
+  const record = {
+    token: token,
+    requestId: requestId,
+    safeId: safeId,
+    docStatus: docStatus,
+    docTitle: String(payload?.docTitle || "").trim(),
+    requester: String(payload?.requester || "").trim(),
+    createdAtMs: now,
+    expiresAtMs: now + 7 * 24 * 60 * 60 * 1000,
+    used: false,
+    storage: "gas",
+  };
+
+  PropertiesService.getScriptProperties().setProperty(
+    _getApprovalLinkPropertyKey_(token),
+    JSON.stringify(record),
+  );
+
+  return {
+    status: "success",
+    data: record,
+    message: "สร้าง approval link token สำเร็จ",
+  };
+}
+
+function getApprovalLinkToken(token) {
+  const tokenValue = String(token || "").trim();
+  if (!tokenValue) {
+    return { status: "error", message: "ไม่พบ token" };
+  }
+  const record = _safeParseApprovalLinkRecord_(
+    PropertiesService.getScriptProperties().getProperty(
+      _getApprovalLinkPropertyKey_(tokenValue),
+    ),
+  );
+  if (!record) {
+    return { status: "error", message: "ไม่พบ approval link token" };
+  }
+  return record;
+}
+
+function markApprovalLinkTokenUsed(payload) {
+  const tokenValue = String(payload?.token || "").trim();
+  if (!tokenValue) {
+    return { status: "error", message: "ไม่พบ token" };
+  }
+
+  const key = _getApprovalLinkPropertyKey_(tokenValue);
+  const record = _safeParseApprovalLinkRecord_(
+    PropertiesService.getScriptProperties().getProperty(key),
+  );
+  if (!record) {
+    return { status: "error", message: "ไม่พบ approval link token" };
+  }
+
+  record.used = true;
+  record.usedAtMs = Date.now();
+  PropertiesService.getScriptProperties().setProperty(key, JSON.stringify(record));
+
+  return {
+    status: "success",
+    data: record,
+    message: "อัปเดตสถานะ approval link token เรียบร้อยแล้ว",
+  };
 }
 
 // ==================================================================

@@ -150,6 +150,58 @@ function collectFormTravelSchedule(prefix = 'form') {
     return { requesterTel, driverName, itinerary };
 }
 
+function getSignerPositionOptions() {
+    return Object.keys(specialPositionMap || {})
+        .filter(position => position && position !== 'ผู้อำนวยการโรงเรียน');
+}
+
+function syncSignerHeadName(selectId, headNameInputId, fallbackName = '') {
+    const select = document.getElementById(selectId);
+    const headInput = document.getElementById(headNameInputId);
+    if (!headInput) return;
+    const selectedPosition = select?.value || '';
+    headInput.value = selectedPosition ? (specialPositionMap[selectedPosition] || fallbackName || '') : '';
+}
+
+function populateSignerPositionSelect(selectId, selectedValue = '') {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+
+    const previousValue = selectedValue || select.value || '';
+    const positions = getSignerPositionOptions();
+
+    select.innerHTML = '<option value="">-- เลือกกลุ่มสาระ/งาน --</option>';
+    positions.forEach(position => {
+        const option = document.createElement('option');
+        option.value = position;
+        option.textContent = position;
+        select.appendChild(option);
+    });
+
+    if (previousValue && !positions.includes(previousValue)) {
+        const legacyOption = document.createElement('option');
+        legacyOption.value = previousValue;
+        legacyOption.textContent = previousValue;
+        select.appendChild(legacyOption);
+    }
+
+    select.value = previousValue || '';
+}
+
+window.refreshSignerPositionOptions = function() {
+    const formSelect = document.getElementById('form-department');
+    const editSelect = document.getElementById('edit-department');
+
+    if (formSelect) {
+        populateSignerPositionSelect('form-department', formSelect.value || '');
+        syncSignerHeadName('form-department', 'form-head-name');
+    }
+    if (editSelect) {
+        populateSignerPositionSelect('edit-department', editSelect.value || '');
+        syncSignerHeadName('edit-department', 'edit-head-name');
+    }
+};
+
 function updateRequestFormTravelScheduleSection() {
     const section = document.getElementById('form-travel-schedule-section');
     const rowsContainer = document.getElementById('form-ts-itinerary-rows');
@@ -190,6 +242,8 @@ function updateRequestFormTravelScheduleSection() {
 
 function setupFormConditions() {
     setupProvinceField('form-province', 'form-province-other'); // เรียกฟังก์ชันสร้างจังหวัด
+    populateSignerPositionSelect('form-department');
+    syncSignerHeadName('form-department', 'form-head-name');
 
     const province = document.getElementById('form-province');
     const provinceOther = document.getElementById('form-province-other');
@@ -819,6 +873,7 @@ function resetEditPage() {
 
 function setupEditPageEventListeners() {
     setupProvinceField('edit-province', 'edit-province-other');
+    populateSignerPositionSelect('edit-department');
 
     document.getElementById('back-to-dashboard').addEventListener('click', () => {
         console.log("🏠 Returning to dashboard from edit page");
@@ -852,9 +907,7 @@ function setupEditPageEventListeners() {
     });
     
     document.getElementById('edit-department').addEventListener('change', (e) => {
-        const selectedPosition = e.target.value;
-        const headNameInput = document.getElementById('edit-head-name');
-        headNameInput.value = specialPositionMap[selectedPosition] || '';
+        syncSignerHeadName('edit-department', 'edit-head-name');
     });
 }
 
@@ -994,9 +1047,8 @@ async function populateEditForm(requestData) {
         }
 
         // --- 5. ข้อมูลผู้ลงนาม ---
-        const deptSelect = document.getElementById('edit-department');
-        if (deptSelect) deptSelect.value = requestData.department || '';
-        document.getElementById('edit-head-name').value = requestData.headName || '';
+        populateSignerPositionSelect('edit-department', requestData.department || '');
+        syncSignerHeadName('edit-department', 'edit-head-name', requestData.headName || '');
 
         // ★★★ เก็บข้อมูลเดิมไว้ในตัวแปร Global (สำคัญมากสำหรับการบันทึก) ★★★
         // เพื่อให้ฟังก์ชัน saveEditRequest รู้ว่าไฟล์เดิมคืออะไร หากผู้ใช้ไม่ได้อัปโหลดไฟล์ใหม่ทับ
@@ -1529,10 +1581,8 @@ async function resetRequestForm() {
     document.getElementById('form-doc-date').value = today;
     document.getElementById('form-start-date').value = today;
     document.getElementById('form-end-date').value = today;
-    document.getElementById('form-department').addEventListener('change', (e) => {
-        const selectedDept = e.target.value;
-        document.getElementById('form-head-name').value = specialPositionMap[selectedDept] || '';
-    });
+    populateSignerPositionSelect('form-department');
+    syncSignerHeadName('form-department', 'form-head-name');
 }
 
 function addAttendeeField() {
@@ -2904,6 +2954,7 @@ window.openSendMemoFromList = function(requestId, departmentName = null) {
     // ★ รีเซ็ตลำดับการอัพโหลดและ pdfBase64 cache เมื่อเปิด Modal ใหม่
     window._memoUploadOrder = {};
     window._memoAutoBase64  = null;
+    window._memoSourceMode = 'auto';
 
     const forceUploadMode = typeof isUnifiedMemoUploadEnabled === 'function' && isUnifiedMemoUploadEnabled();
 
@@ -2932,8 +2983,10 @@ window.openSendMemoFromList = function(requestId, departmentName = null) {
     const preSignedInput   = document.getElementById('pre-signed-memo-url');
     const preSignedDisplay = document.getElementById('pre-signed-memo-display');
     const preSignedLink    = document.getElementById('pre-signed-memo-link');
+    const manualMemoInput  = document.getElementById('file-signed-memo');
 
     if (preSignedInput) preSignedInput.value = memoUrl;
+    if (manualMemoInput) manualMemoInput.value = '';
 
     if (memoUrl && preSignedDisplay) {
         preSignedDisplay.classList.remove('hidden');
@@ -2950,6 +3003,7 @@ window.openSendMemoFromList = function(requestId, departmentName = null) {
         }).catch(() => { window._memoAutoBase64 = null; });
     }
 
+    if (typeof applyMemoSourceModeUI === 'function') applyMemoSourceModeUI();
     document.getElementById('send-memo-modal').style.display = 'flex';
 };
 
@@ -2961,6 +3015,7 @@ window.openSendMemoWithPreSignedDoc = function(requestId, signedUrl, departmentN
     // ★ รีเซ็ตลำดับการอัพโหลดและ pdfBase64 cache เมื่อเปิด Modal ใหม่
     window._memoUploadOrder = {};
     window._memoAutoBase64  = null;
+    window._memoSourceMode = 'auto';
 
     // โหลด pdfBase64 จาก Firestore (non-blocking) เพื่อใช้ merge กับไฟล์แนบ
     if (typeof db !== 'undefined') {
@@ -2987,7 +3042,9 @@ window.openSendMemoWithPreSignedDoc = function(requestId, signedUrl, departmentN
     const preSignedInput = document.getElementById('pre-signed-memo-url');
     const preSignedDisplay = document.getElementById('pre-signed-memo-display');
     const preSignedLink = document.getElementById('pre-signed-memo-link');
+    const manualMemoInput = document.getElementById('file-signed-memo');
     if (preSignedInput) preSignedInput.value = signedUrl || '';
+    if (manualMemoInput) manualMemoInput.value = '';
     if (signedUrl && preSignedDisplay) {
         preSignedDisplay.classList.remove('hidden');
         if (preSignedLink) {
@@ -3003,6 +3060,7 @@ window.openSendMemoWithPreSignedDoc = function(requestId, signedUrl, departmentN
         if (forwardSelect) forwardSelect.value = targetStatus;
     }
 
+    if (typeof applyMemoSourceModeUI === 'function') applyMemoSourceModeUI();
     document.getElementById('send-memo-modal').style.display = 'flex';
 };
 
@@ -3021,6 +3079,8 @@ async function handleMemoSubmitFromModal(e) {
         ? 'non_reimburse'
         : (document.querySelector('input[name="modal_memo_type"]:checked')?.value || 'non_reimburse');
     const preSignedUrl = document.getElementById('pre-signed-memo-url')?.value || '';
+    const manualMemoFile = document.getElementById('file-signed-memo')?.files[0] || null;
+    const memoSourceMode = window._memoSourceMode || 'auto';
 
     const forwardToStatus = memoType === 'reimburse'
         ? 'waiting_admin_review'
@@ -3046,7 +3106,12 @@ async function handleMemoSubmitFromModal(e) {
             // แหล่ง A: _memoAutoBase64 (cache จาก Firestore — เร็วที่สุด)
             // แหล่ง B: fetch จาก preSignedUrl (Firebase Storage — ต้อง CORS)
             let memoBlob = null;
-            if (window._memoAutoBase64) {
+            if (memoSourceMode === 'manual') {
+                if (!manualMemoFile && !isAdmin) {
+                    throw new Error('กรุณาอัปโหลดไฟล์บันทึกข้อความด้วยตัวเองก่อนส่งต่อ');
+                }
+                memoBlob = manualMemoFile || null;
+            } else if (window._memoAutoBase64) {
                 try {
                     const raw = window._memoAutoBase64.replace(/^data:[^;]+;base64,/, "");
                     const bin = atob(raw);
@@ -3059,7 +3124,7 @@ async function handleMemoSubmitFromModal(e) {
                 }
             }
             
-            if (!memoBlob && preSignedUrl) {
+            if (!memoBlob && memoSourceMode !== 'manual' && preSignedUrl) {
                 btn.innerHTML = "<div class=\"loader\"></div> กำลังโหลดบันทึก...";
                 try {
                     const resp = await fetch(preSignedUrl);
@@ -3155,12 +3220,15 @@ async function handleMemoSubmitFromModal(e) {
 
         const preSignedInputEl   = document.getElementById('pre-signed-memo-url');
         const preSignedDisplayEl = document.getElementById('pre-signed-memo-display');
+        const manualMemoInputEl  = document.getElementById('file-signed-memo');
         if (preSignedInputEl)   preSignedInputEl.value = '';
         if (preSignedDisplayEl) preSignedDisplayEl.classList.add('hidden');
+        if (manualMemoInputEl)  manualMemoInputEl.value = '';
 
         document.getElementById('send-memo-modal').style.display = 'none';
         document.getElementById('send-memo-form').reset();
         window._memoAutoBase64 = null;
+        window._memoSourceMode = 'auto';
 
         await fetchUserRequests(true);
         switchPage('dashboard-page');

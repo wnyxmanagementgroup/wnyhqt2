@@ -223,6 +223,9 @@ async function initializeUserSession(user) {
                 // อัปเดต specialPositionMap
                 if (data.names && typeof specialPositionMap !== 'undefined') {
                     Object.assign(specialPositionMap, data.names);
+                    if (typeof refreshSignerPositionOptions === 'function') {
+                        refreshSignerPositionOptions();
+                    }
                 }
                 // ตรวจ approver ผ่าน username (สำหรับกรณี role ยังไม่ได้ update)
                 if (!hasApproverRole) {

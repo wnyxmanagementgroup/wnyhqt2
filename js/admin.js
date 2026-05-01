@@ -21,17 +21,13 @@ async function fetchAllRequestsForCommand() {
         if (!checkAdminAccess()) return;
         
         // 2. แสดง Loader
-        const container = document.getElementById('admin-requests-list');
+        const container = isCompactAdminCardView()
+            ? document.getElementById('admin-requests-cards')
+            : document.getElementById('admin-requests-table-list');
         if (container) {
-            container.innerHTML = `
-                <tr>
-                    <td colspan="9" class="text-center py-12">
-                        <div class="flex flex-col items-center justify-center gap-2">
-                            <span class="loader"></span>
-                            <p class="text-gray-500 animate-pulse mt-2">กำลังโหลดข้อมูลคำขอทั้งหมด...</p>
-                        </div>
-                    </td>
-                </tr>`;
+            container.innerHTML = isCompactAdminCardView()
+                ? `<div class="admin-card-loading"><span class="loader"></span><p class="text-gray-500 animate-pulse mt-2">กำลังโหลดข้อมูลคำขอทั้งหมด...</p></div>`
+                : `<tr><td colspan="9" class="text-center py-12"><div class="flex flex-col items-center justify-center gap-2"><span class="loader"></span><p class="text-gray-500 animate-pulse mt-2">กำลังโหลดข้อมูลคำขอทั้งหมด...</p></div></td></tr>`;
         }
 
         // 3. ★★★ รอให้ Firebase Auth พร้อมใช้งาน (แก้ปัญหา Rules Block) ★★★
@@ -157,16 +153,13 @@ async function fetchAllRequestsForCommand() {
     } catch (error) { 
         console.error("❌ fetchAllRequestsForCommand Error:", error);
         
-        const container = document.getElementById('admin-requests-list');
+        const container = isCompactAdminCardView()
+            ? document.getElementById('admin-requests-cards')
+            : document.getElementById('admin-requests-table-list');
         if (container) {
-            container.innerHTML = `
-                <div class="text-center py-10">
-                    <p class="text-red-500 font-medium">ไม่สามารถโหลดข้อมูลได้</p>
-                    <p class="text-sm text-gray-500 mt-2">${error.message}</p>
-                    <button onclick="fetchAllRequestsForCommand()" class="btn btn-sm bg-gray-200 hover:bg-gray-300 mt-4">
-                        ลองใหม่อีกครั้ง
-                    </button>
-                </div>`;
+            container.innerHTML = isCompactAdminCardView()
+                ? `<div class="admin-card-empty"><p class="text-red-500 font-medium">ไม่สามารถโหลดข้อมูลได้</p><p class="text-sm text-gray-500 mt-2">${error.message}</p><button onclick="fetchAllRequestsForCommand()" class="btn btn-sm bg-gray-200 hover:bg-gray-300 mt-4">ลองใหม่อีกครั้ง</button></div>`
+                : `<tr><td colspan="9" class="text-center py-10"><p class="text-red-500 font-medium">ไม่สามารถโหลดข้อมูลได้</p><p class="text-sm text-gray-500 mt-2">${error.message}</p><button onclick="fetchAllRequestsForCommand()" class="btn btn-sm bg-gray-200 hover:bg-gray-300 mt-4">ลองใหม่อีกครั้ง</button></td></tr>`;
         }
         showAlert('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลได้: ' + error.message); 
     }
@@ -432,26 +425,43 @@ function formatThaiDate(dateString) {
     return `${d} ${m} ${y}`;
 }
 // --- 1. ฟังก์ชันแสดงรายการคำขอ (ตาราง) ---
+function isCompactAdminCardView() {
+    return typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+}
+
 function renderAdminRequestsList(requests) {
-    const container = document.getElementById('admin-requests-list');
+    const tableContainer = document.getElementById('admin-requests-table-list');
+    const cardContainer = document.getElementById('admin-requests-cards');
+    const compactView = isCompactAdminCardView();
 
     if (!requests || requests.length === 0) {
-        container.innerHTML = `
-            <tr><td colspan="8" class="text-center py-10 text-gray-400">
-                <p class="text-lg">ไม่พบคำขอไปราชการ</p>
-                <p class="text-sm">รายการคำขอใหม่จะปรากฏที่นี่</p>
-            </td></tr>`;
+        if (tableContainer) {
+            tableContainer.innerHTML = `
+                <tr><td colspan="9" class="text-center py-10 text-gray-400">
+                    <p class="text-lg">ไม่พบคำขอไปราชการ</p>
+                    <p class="text-sm">รายการคำขอใหม่จะปรากฏที่นี่</p>
+                </td></tr>`;
+        }
+        if (cardContainer) {
+            cardContainer.innerHTML = `
+                <div class="admin-card-empty">
+                    <p class="text-lg text-gray-500">ไม่พบคำขอไปราชการ</p>
+                    <p class="text-sm text-gray-400 mt-2">รายการคำขอใหม่จะปรากฏที่นี่</p>
+                </div>`;
+        }
         return;
     }
 
-    container.innerHTML = requests.map(request => {
-        // --- นับจำนวนคน ---
+    const tableRows = [];
+    const cardItems = [];
+
+    requests.forEach(request => {
         let attendeesList = [];
         try {
             attendeesList = typeof request.attendees === 'string' ? JSON.parse(request.attendees) : (request.attendees || []);
-        } catch(e) { attendeesList = []; }
+        } catch (e) { attendeesList = []; }
 
-        const normalize = (str) => (str || "").trim().replace(/\s+/g, ' ');
+        const normalize = (str) => (str || '').trim().replace(/\s+/g, ' ');
         const reqName = normalize(request.requesterName);
         const hasRequesterInList = attendeesList.some(att => normalize(att.name) === reqName);
 
@@ -461,9 +471,8 @@ function renderAdminRequestsList(requests) {
         } else if (request.attendeeCount) {
             totalPeople = parseInt(request.attendeeCount) + 1;
         }
-        const peopleCategory = totalPeople === 1 ? "เดี่ยว" : (totalPeople <= 5 ? "กลุ่มเล็ก" : "กลุ่มใหญ่");
+        const peopleCategory = totalPeople === 1 ? 'เดี่ยว' : (totalPeople <= 5 ? 'กลุ่มเล็ก' : 'กลุ่มใหญ่');
 
-        // --- งบประมาณ ---
         let expenseCell = '';
         if (request.expenseOption === 'partial') {
             const amount = request.totalExpense ? Number(request.totalExpense).toLocaleString() : '0';
@@ -472,20 +481,20 @@ function renderAdminRequestsList(requests) {
             expenseCell = `<span class="inline-block px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-500 border border-gray-200 whitespace-nowrap">⛔ ไม่เบิก</span>`;
         }
 
-        const safeId       = escapeHtml(request.id);
+        const safeId = escapeHtml(request.id);
         const displayName = request.requesterName || request.username || '-';
         const displayPurpose = request.purpose || '-';
         const displayProvince = request.province ? getStoredProvinceValue(request.province) : '';
         const displayLocation = request.location || displayProvince || '-';
 
-        const safeName     = escapeHtml(displayName);
-        const safePurpose  = escapeHtml(displayPurpose);
+        const safeName = escapeHtml(displayName);
+        const safePurpose = escapeHtml(displayPurpose);
         const safeLocation = escapeHtml(displayLocation);
-        const startDate    = formatDisplayDate(request.startDate);
-        const endDate      = formatDisplayDate(request.endDate);
-        const dateHtml     = startDate === endDate ? startDate : `${startDate}<br><span class="text-gray-400">– ${endDate}</span>`;
+        const startDate = formatDisplayDate(request.startDate);
+        const endDate = formatDisplayDate(request.endDate);
+        const dateHtml = startDate === endDate ? startDate : `${startDate}<br><span class="text-gray-400">– ${endDate}</span>`;
+        const plainDate = startDate === endDate ? startDate : `${startDate} - ${endDate}`;
 
-        // --- หนังสือส่ง ---
         const dispatchUrl = request.dispatchBookUrl || request.dispatchBookPdfUrl;
         const travelScheduleUrl = request.travelSchedulePdfUrl || request.travelScheduleUrl;
         const hasTravelScheduleData = !!(request.travelSchedule && JSON.stringify(request.travelSchedule) !== '{}');
@@ -496,18 +505,15 @@ function renderAdminRequestsList(requests) {
                </div>`
             : `<button onclick="openDispatchModal('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#f9a8d4,#7dd3fc);color:#075985;">📦 ออกหนังสือส่ง</button>`;
 
-        // --- ส่งบันทึก ---
         const adminMemoBtn = !request.completedMemoUrl
             ? `<button onclick="openSendMemoFromList('${safeId}')" class="btn btn-xs w-full animate-pulse" style="background:linear-gradient(135deg,#fb923c,#f97316);color:white;">📤 ส่งบันทึกแทน</button>`
             : `<a href="${request.completedMemoUrl}" target="_blank" class="btn btn-xs w-full" style="background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;">📄 ดูบันทึก</a>`;
 
-        // --- PDF ต้นฉบับ ---
         const draftPdfUrl = request.currentPdfUrl || request.pdfUrl || request.memoPdfUrl;
         const draftPdfBtn = draftPdfUrl
             ? `<a href="${draftPdfUrl}" target="_blank" class="btn btn-xs" style="background:#e0e7ff;color:#4338ca;border:1px solid #c7d2fe;">🖨️ PDF</a>`
             : '';
 
-        // --- ปุ่มคำสั่ง ---
         let commandActionBtn = '';
         if (request.commandPdfUrl) {
             commandActionBtn = `
@@ -519,7 +525,6 @@ function renderAdminRequestsList(requests) {
                 <button onclick="openAdminGenerateCommand('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#34d399,#10b981);color:white;">✅ ออกคำสั่ง (${peopleCategory})</button>`;
         }
 
-        // สถานะ / ป้าย
         const statusBadge = request.commandPdfUrl
             ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#dcfce7;color:#15803d;border:1px solid #bbf7d0;">✅ มีคำสั่ง</span>`
             : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#fef9c3;color:#b45309;border:1px solid #fde68a;">⏳ รอออกคำสั่ง</span>`;
@@ -528,13 +533,10 @@ function renderAdminRequestsList(requests) {
             : '';
         const travelScheduleBadge = travelScheduleUrl
             ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#ecfdf5;color:#047857;border:1px solid #bbf7d0;">📅 มีกำหนดการ</span>`
-            : (hasTravelScheduleData
-                ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">💾 บันทึกกำหนดการ</span>`
-                : '');
+            : (hasTravelScheduleData ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">💾 บันทึกกำหนดการ</span>` : '');
 
-        // สถานะหลัก + docStatus
-        const mainStatus   = request.status    || '';
-        const docStatus    = request.docStatus || '';
+        const mainStatus = request.status || '';
+        const docStatus = request.docStatus || '';
         const mainStatusBadge = mainStatus
             ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium max-w-[140px] truncate" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;" title="${escapeHtml(mainStatus)}">${escapeHtml(mainStatus)}</span>`
             : '';
@@ -542,53 +544,86 @@ function renderAdminRequestsList(requests) {
             ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs max-w-[140px] truncate" style="background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;font-size:0.65rem;" title="${escapeHtml(docStatus)}">${escapeHtml(docStatus)}</span>`
             : '';
 
-        // safe values สำหรับส่งเข้า onclick (escape single-quotes)
-        const safeStatus    = (mainStatus).replace(/'/g, "\\'");
-        const safeDocStatus = (docStatus).replace(/'/g, "\\'");
-
+        const safeStatus = mainStatus.replace(/'/g, "\\'");
+        const safeDocStatus = docStatus.replace(/'/g, "\\'");
         const rowClass = request.commandPdfUrl ? 'row-green' : '';
 
-        return `
-        <tr class="${rowClass}" data-id="${safeId}">
-            <td class="text-center">
-                <input type="checkbox" class="bulk-checkbox w-4 h-4 rounded accent-indigo-600 cursor-pointer" value="${safeId}" onchange="updateBulkToolbar()">
-            </td>
-            <td>
-                <div class="font-bold text-indigo-700 text-sm leading-tight">${safeId}</div>
-                <div class="text-xs text-gray-400 mt-0.5 font-medium">${peopleCategory}</div>
-            </td>
-            <td>
-                <div class="font-semibold text-gray-800 text-sm leading-tight">${safeName}</div>
-            </td>
-            <td style="max-width:200px">
-                <div class="text-gray-700 text-sm leading-snug" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${safePurpose}</div>
-                <div class="text-gray-400 text-xs mt-0.5">📍 ${safeLocation}</div>
-            </td>
-            <td class="whitespace-nowrap text-xs text-gray-600">${dateHtml}</td>
-            <td class="text-center">
-                <span class="inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold" style="background:#eef2ff;color:#4338ca;">${totalPeople}</span>
-            </td>
-            <td class="text-center">${expenseCell}</td>
-            <td>
-                <div class="flex flex-wrap gap-1 mb-1.5">${statusBadge}${dispatchBadge}${travelScheduleBadge}</div>
-                <div class="flex flex-wrap gap-1 mb-1">${mainStatusBadge}</div>
-                <div class="flex flex-wrap gap-1 items-center">${docStatusBadge}${draftPdfBtn}</div>
-            </td>
-            <td>
-                <div class="flex flex-col gap-1.5 items-stretch" style="min-width:128px">
+        const cardHtml = `
+        <article class="admin-record-card ${rowClass}" data-id="${safeId}">
+            <div class="admin-record-card__summary">
+                <div class="admin-record-card__top">
+                    <label class="admin-record-card__select">
+                        <input type="checkbox" class="bulk-checkbox w-4 h-4 rounded accent-indigo-600 cursor-pointer" value="${safeId}" onchange="updateBulkToolbar()">
+                        <span>เลือก</span>
+                    </label>
+                </div>
+                <div class="admin-record-card__id">${safeId}</div>
+                <div class="admin-record-card__name">${safeName}</div>
+                <div class="admin-record-card__subline">${peopleCategory}</div>
+            </div>
+            <div class="admin-record-card__details">
+                <div class="admin-record-card__meta">
+                    <div class="admin-record-card__field admin-record-card__field--wide">
+                        <span class="admin-record-card__field-label">เรื่อง</span>
+                        <div class="admin-record-card__field-value">${safePurpose}</div>
+                    </div>
+                    <div class="admin-record-card__field">
+                        <span class="admin-record-card__field-label">สถานที่</span>
+                        <div class="admin-record-card__field-value admin-record-card__field-value--muted">📍 ${safeLocation}</div>
+                    </div>
+                    <div class="admin-record-card__field">
+                        <span class="admin-record-card__field-label">วันที่เดินทาง</span>
+                        <div class="admin-record-card__field-value admin-record-card__field-value--muted">${dateHtml}</div>
+                    </div>
+                </div>
+                <div class="admin-record-card__meta admin-record-card__meta--three">
+                    <div class="admin-record-card__field">
+                        <span class="admin-record-card__field-label">ผู้ร่วมเดินทาง</span>
+                        <div class="admin-record-card__field-value">${totalPeople} คน</div>
+                    </div>
+                    <div class="admin-record-card__field">
+                        <span class="admin-record-card__field-label">งบประมาณ</span>
+                        <div class="admin-record-card__field-value">${expenseCell}</div>
+                    </div>
+                    <div class="admin-record-card__field">
+                        <span class="admin-record-card__field-label">ช่วงเวลา</span>
+                        <div class="admin-record-card__field-value admin-record-card__field-value--muted">${plainDate}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="admin-record-card__side">
+                <div class="admin-record-card__badges">${statusBadge}${dispatchBadge}${travelScheduleBadge}${mainStatusBadge}${docStatusBadge}</div>
+                <div class="admin-record-card__files">${draftPdfBtn || '<span class="text-xs text-gray-300">ยังไม่มีไฟล์ PDF แนบ</span>'}</div>
+                <div class="admin-record-card__actions">
                     ${commandActionBtn}
                     ${dispatchBtn}
-                    ${travelScheduleUrl ? `<a href="${sanitizeUrl(travelScheduleUrl)}" target="_blank" class="btn btn-xs w-full" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">📅 ดูกำหนดการ</a>` : ''}
-                    ${isEligibleForTravelSchedule(request) ? `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#7dd3fc,#f9a8d4);color:#075985;">${travelScheduleUrl ? '✏️ แก้กำหนดการ' : '📅 กำหนดการเดินทาง'}</button>` : ''}
-                    <button onclick="openCustomStatusModal('${safeId}', '${safeStatus}', '${safeDocStatus}')"
-                        class="btn btn-xs w-full" style="background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;">
-                        ✏️ เปลี่ยนสถานะ
-                    </button>
-                    <button onclick="deleteRequestByAdmin('${safeId}')" class="btn btn-xs w-full mt-0.5" style="background:#fff1f2;color:#e11d48;border:1px solid #fecdd3;">🗑️ ลบ</button>
+                    ${travelScheduleUrl ? `<a href="${sanitizeUrl(travelScheduleUrl)}" target="_blank" class="btn btn-xs" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">📅 ดูกำหนดการ</a>` : ''}
+                    ${isEligibleForTravelSchedule(request) ? `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs" style="background:linear-gradient(135deg,#7dd3fc,#f9a8d4);color:#075985;">${travelScheduleUrl ? '✏️ แก้กำหนดการ' : '📅 กำหนดการเดินทาง'}</button>` : ''}
+                    <button onclick="openCustomStatusModal('${safeId}', '${safeStatus}', '${safeDocStatus}')" class="btn btn-xs btn--full" style="background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;">✏️ เปลี่ยนสถานะ</button>
+                    <button onclick="deleteRequestByAdmin('${safeId}')" class="btn btn-xs btn--full" style="background:#fff1f2;color:#e11d48;border:1px solid #fecdd3;">🗑️ ลบ</button>
                 </div>
-            </td>
+            </div>
+        </article>`;
+
+        const tableHtml = `
+        <tr class="${rowClass}" data-id="${safeId}">
+            <td class="text-center"><input type="checkbox" class="bulk-checkbox w-4 h-4 rounded accent-indigo-600 cursor-pointer" value="${safeId}" onchange="updateBulkToolbar()"></td>
+            <td><div class="font-bold text-indigo-700 text-sm leading-tight">${safeId}</div><div class="text-xs text-gray-400 mt-0.5 font-medium">${peopleCategory}</div></td>
+            <td><div class="font-semibold text-gray-800 text-sm leading-tight">${safeName}</div></td>
+            <td style="max-width:240px"><div class="text-gray-700 text-sm leading-snug" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${safePurpose}</div><div class="text-gray-400 text-xs mt-0.5">📍 ${safeLocation}</div></td>
+            <td class="whitespace-nowrap text-xs text-gray-600">${dateHtml}</td>
+            <td class="text-center"><span class="inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold" style="background:#eef2ff;color:#4338ca;">${totalPeople}</span></td>
+            <td class="text-center">${expenseCell}</td>
+            <td><div class="flex flex-wrap gap-1 mb-1.5">${statusBadge}${dispatchBadge}${travelScheduleBadge}</div><div class="flex flex-wrap gap-1 mb-1">${mainStatusBadge}</div><div class="flex flex-wrap gap-1 items-center">${docStatusBadge}${draftPdfBtn}</div></td>
+            <td><div class="flex flex-col gap-1.5 items-stretch" style="min-width:138px">${commandActionBtn}${dispatchBtn}${travelScheduleUrl ? `<a href="${sanitizeUrl(travelScheduleUrl)}" target="_blank" class="btn btn-xs w-full" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;">📅 ดูกำหนดการ</a>` : ''}${isEligibleForTravelSchedule(request) ? `<button onclick="openTravelScheduleByReqId('${safeId}')" class="btn btn-xs w-full" style="background:linear-gradient(135deg,#7dd3fc,#f9a8d4);color:#075985;">${travelScheduleUrl ? '✏️ แก้กำหนดการ' : '📅 กำหนดการเดินทาง'}</button>` : ''}<button onclick="openCustomStatusModal('${safeId}', '${safeStatus}', '${safeDocStatus}')" class="btn btn-xs w-full" style="background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;">✏️ เปลี่ยนสถานะ</button><button onclick="deleteRequestByAdmin('${safeId}')" class="btn btn-xs w-full mt-0.5" style="background:#fff1f2;color:#e11d48;border:1px solid #fecdd3;">🗑️ ลบ</button></div></td>
         </tr>`;
-    }).join('');
+
+        if (compactView) cardItems.push(cardHtml);
+        else tableRows.push(tableHtml);
+    });
+
+    if (tableContainer) tableContainer.innerHTML = compactView ? '' : tableRows.join('');
+    if (cardContainer) cardContainer.innerHTML = compactView ? cardItems.join('') : '';
 }
 
 // --- 2. ฟังก์ชัน Helper: เลือกสีของ Dropdown ---
@@ -1502,6 +1537,21 @@ function getSignedPackageEntries(record = {}) {
     return entries;
 }
 
+function getAdminUploadedMemoFiles(record = {}) {
+    const files = [];
+    const pushFile = (key, label, url, className) => {
+        if (!url || files.some(item => item.url === url)) return;
+        files.push({ key, label, url, className });
+    };
+
+    // แสดงเฉพาะไฟล์ที่แอดมินอัปโหลดเอง ไม่รวมไฟล์ที่ระบบ generate / archive อัตโนมัติ
+    pushFile('adminMemo', '📄 บันทึก', record.adminMemoUrl, 'bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200');
+    pushFile('command', '📋 คำสั่ง', record.completedCommandUrl, 'bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200');
+    pushFile('dispatch', '📦 หนังสือส่ง', record.dispatchBookUrl, 'bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200');
+
+    return files;
+}
+
 function decodeBase64ToArrayBuffer(base64) {
     const bin = window.atob(base64);
     const bytes = new Uint8Array(bin.length);
@@ -1588,26 +1638,32 @@ window.downloadAdminMergedPackage = async function(requestId) {
 };
 
 function renderAdminMemosList(memos) {
-    const container = document.getElementById('admin-memos-list');
+    const tableContainer = document.getElementById('admin-memos-table-list');
+    const cardContainer = document.getElementById('admin-memos-cards');
+    const compactView = isCompactAdminCardView();
+
     if (!memos || memos.length === 0) {
-        container.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-gray-400">ไม่พบบันทึกข้อความในหมวดนี้</td></tr>`;
+        if (tableContainer) tableContainer.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-gray-400">ไม่พบบันทึกข้อความในหมวดนี้</td></tr>`;
+        if (cardContainer) cardContainer.innerHTML = `<div class="admin-card-empty">ไม่พบบันทึกข้อความในหมวดนี้</div>`;
         return;
     }
 
-    container.innerHTML = memos.map((memo, idx) => {
-        const hasCompletedFiles = memo.completedMemoUrl || memo.adminMemoUrl || memo.completedCommandUrl || memo.completedDispatchBookUrl || memo.dispatchBookUrl;
-        const hasCommand        = !!memo.completedCommandUrl || !!memo.commandPdfUrl;
+    const tableRows = [];
+    const cardItems = [];
+
+    memos.forEach((memo, idx) => {
+        const adminUploadedFiles = getAdminUploadedMemoFiles(memo);
+        const hasCompletedFiles = adminUploadedFiles.length > 0;
+        const hasCommand = !!memo.completedCommandUrl || !!memo.commandPdfUrl;
         const signedPackageEntries = getSignedPackageEntries(memo);
         const canMergePackage = signedPackageEntries.length >= 2;
-        // ★ แยก gasId (GAS API) กับ refId (เลขที่บันทึก / Firestore key)
-        const gasId          = escapeHtml(memo.id || '');
-        const refId          = escapeHtml(memo.refNumber || memo.requestId || memo.id || '');
-        const safeId         = refId;
-        const displayName    = escapeHtml(memo.requesterName || memo.submittedBy || '-');
-        const displayPurpose = escapeHtml(memo.purpose || '-');
-        const displayLocation = escapeHtml(memo.location || (memo.province ? getStoredProvinceValue(memo.province) : ''));
+        const gasId = escapeHtml(memo.id || '');
+        const refId = escapeHtml(memo.refNumber || memo.requestId || memo.id || '');
+        const safeId = refId;
+        const displayName = escapeHtml(memo.requesterName || memo.submittedBy || '-');
+        const displayPurpose = escapeHtml(memo.purpose || memo.subject || '-');
+        const displayLocation = escapeHtml(memo.location || (memo.province ? getStoredProvinceValue(memo.province) : '') || '-');
 
-        // วันที่
         let dateRange = '-';
         if (memo.startDate || memo.endDate) {
             const s = formatDisplayDate(memo.startDate);
@@ -1617,75 +1673,70 @@ function renderAdminMemosList(memos) {
             dateRange = formatDisplayDate(memo.docDate);
         }
 
-        // สถานะ badge
-        const statusText  = translateStatus(memo.status || memo.docStatus || '');
+        const statusText = translateStatus(memo.status || memo.docStatus || '');
         const statusColor = (memo.status === 'เสร็จสิ้น' || memo.status === 'อนุมัติ')
             ? 'bg-green-100 text-green-700'
             : (memo.status === 'ไม่อนุมัติ' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700');
 
-        // ไฟล์
-        const latestPdfUrl = memo.currentPdfUrl || memo.pdfUrl || memo.memoPdfUrl;
-        const fileLinks = [
-            latestPdfUrl
-                ? `<a href="${latestPdfUrl}" target="_blank" class="btn btn-xs bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200">🖨️ PDF</a>` : '',
-            memo.completedMemoUrl
-                ? `<a href="${memo.completedMemoUrl}" target="_blank" class="btn btn-xs bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200">📎 ต้นทาง</a>` : '',
-            memo.adminMemoUrl
-                ? `<a href="${memo.adminMemoUrl}" target="_blank" class="btn btn-xs bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200">📄 บันทึก</a>` : '',
-            (memo.completedCommandUrl || memo.commandPdfUrl)
-                ? `<a href="${memo.completedCommandUrl || memo.commandPdfUrl}" target="_blank" class="btn btn-xs bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200">📋 คำสั่ง</a>` : '',
-            (memo.completedDispatchBookUrl || memo.dispatchBookUrl || memo.dispatchBookPdfUrl)
-                ? `<a href="${memo.completedDispatchBookUrl || memo.dispatchBookUrl || memo.dispatchBookPdfUrl}" target="_blank" class="btn btn-xs bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200">📦 หนังสือส่ง</a>` : '',
-        ].filter(Boolean).join('');
+        const fileLinks = adminUploadedFiles
+            .map(file => `<a href="${file.url}" target="_blank" class="btn btn-xs ${file.className}">${file.label}</a>`)
+            .join('');
 
-        // สีแถว
         const rowClass = hasCommand ? 'row-green' : (hasCompletedFiles ? 'row-blue' : '');
+        const cardHtml = `
+        <article class="admin-record-card ${rowClass}">
+            <div class="admin-record-card__summary">
+                <div class="admin-record-card__subline">รายการที่ ${idx + 1}</div>
+                <div class="admin-record-card__id">${safeId}</div>
+                <div class="admin-record-card__name">${displayName}</div>
+                <div class="admin-record-card__subline">${hasCommand ? '✅ ออกคำสั่งแล้ว' : '⏳ รอออกคำสั่ง'}</div>
+            </div>
+            <div class="admin-record-card__details">
+                <div class="admin-record-card__meta">
+                    <div class="admin-record-card__field admin-record-card__field--wide">
+                        <span class="admin-record-card__field-label">เรื่อง</span>
+                        <div class="admin-record-card__field-value">${displayPurpose}</div>
+                    </div>
+                    <div class="admin-record-card__field">
+                        <span class="admin-record-card__field-label">สถานที่</span>
+                        <div class="admin-record-card__field-value admin-record-card__field-value--muted">📍 ${displayLocation}</div>
+                    </div>
+                    <div class="admin-record-card__field">
+                        <span class="admin-record-card__field-label">วันที่</span>
+                        <div class="admin-record-card__field-value admin-record-card__field-value--muted">${dateRange}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="admin-record-card__side">
+                <div class="admin-record-card__badges"><span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}">${statusText}</span></div>
+                <div class="admin-record-card__files">${fileLinks || '<span class="text-xs text-gray-300">ยังไม่มีไฟล์แนบ</span>'}</div>
+                <div class="admin-record-card__actions">
+                    <button onclick="openAdminMemoAction('${gasId}', '${refId}')" class="btn btn-xs ${hasCompletedFiles ? 'bg-green-500 hover:bg-green-600' : 'bg-orange-500 hover:bg-orange-600'} text-white whitespace-nowrap">${hasCompletedFiles ? '📁 จัดการ' : '📤 อัพโหลด'}</button>
+                    ${memo.docStatus === 'waiting_admin_final' ? `<button onclick="handleAdminFinalize('${refId}')" class="btn btn-xs bg-green-600 hover:bg-green-700 text-white">📦 ไฟนอลและส่งเก็บ</button>` : ''}
+                    ${canMergePackage ? `<button onclick="downloadAdminMergedPackage('${refId}')" class="btn btn-xs btn--full bg-sky-100 text-sky-700 border border-sky-300 hover:bg-sky-200">🧷 รวมไฟล์ส่งเขต</button>` : ''}
+                    <button onclick="deleteMemoByAdmin('${refId}', '${gasId}')" class="admin-record-card__delete">🗑️ ลบ</button>
+                </div>
+            </div>
+        </article>`;
 
-        return `
+        const tableHtml = `
         <tr class="${rowClass}">
             <td class="text-center text-xs text-gray-400">${idx + 1}</td>
-            <td>
-                <div class="font-bold text-indigo-700 text-sm">${safeId}</div>
-                ${hasCommand
-                    ? `<div class="text-xs text-green-600 mt-0.5">✅ ออกคำสั่งแล้ว</div>`
-                    : `<div class="text-xs text-gray-400 mt-0.5">⏳ รอออกคำสั่ง</div>`}
-            </td>
+            <td><div class="font-bold text-indigo-700 text-sm">${safeId}</div>${hasCommand ? `<div class="text-xs text-green-600 mt-0.5">✅ ออกคำสั่งแล้ว</div>` : `<div class="text-xs text-gray-400 mt-0.5">⏳ รอออกคำสั่ง</div>`}</td>
             <td><div class="font-medium text-gray-800 text-sm">${displayName}</div></td>
-            <td style="max-width:200px">
-                <div class="text-gray-700 text-sm" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${displayPurpose}</div>
-                ${displayLocation ? `<div class="text-gray-400 text-xs mt-0.5">📍 ${displayLocation}</div>` : ''}
-            </td>
+            <td style="max-width:240px"><div class="text-gray-700 text-sm" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${displayPurpose}</div><div class="text-gray-400 text-xs mt-0.5">📍 ${displayLocation}</div></td>
             <td class="text-xs text-gray-600 whitespace-nowrap">${dateRange}</td>
-            <td>
-                <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}">${statusText}</span>
-            </td>
-            <td>
-                <div class="flex flex-wrap gap-1">${fileLinks || '<span class="text-xs text-gray-300">—</span>'}</div>
-            </td>
-            <td>
-                <div class="flex flex-col gap-1.5 items-center" style="min-width:90px">
-                    <button onclick="openAdminMemoAction('${gasId}', '${refId}')"
-                        class="btn btn-xs ${hasCompletedFiles ? 'bg-green-500 hover:bg-green-600' : 'bg-orange-500 hover:bg-orange-600'} text-white whitespace-nowrap">
-                        ${hasCompletedFiles ? '📁 จัดการ' : '📤 อัพโหลด'}
-                    </button>
-                    ${memo.docStatus === 'waiting_admin_final' ? `
-                    <button onclick="handleAdminFinalize('${refId}')"
-                        class="btn btn-xs bg-green-600 hover:bg-green-700 text-white">
-                        📦 ไฟนล์และส่งเก็บ
-                    </button>` : ''}
-                    ${canMergePackage ? `
-                    <button onclick="downloadAdminMergedPackage('${refId}')"
-                        class="btn btn-xs bg-sky-100 text-sky-700 border border-sky-300 hover:bg-sky-200">
-                        🧷 รวมส่งเขต
-                    </button>` : ''}
-                    <button onclick="deleteMemoByAdmin('${refId}', '${gasId}')"
-                        class="text-xs text-red-400 hover:text-red-600">
-                        🗑️ ลบ
-                    </button>
-                </div>
-            </td>
+            <td><span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}">${statusText}</span></td>
+            <td><div class="flex flex-wrap gap-1">${fileLinks || '<span class="text-xs text-gray-300">—</span>'}</div></td>
+            <td><div class="flex flex-col gap-1.5 items-center" style="min-width:100px"><button onclick="openAdminMemoAction('${gasId}', '${refId}')" class="btn btn-xs ${hasCompletedFiles ? 'bg-green-500 hover:bg-green-600' : 'bg-orange-500 hover:bg-orange-600'} text-white whitespace-nowrap">${hasCompletedFiles ? '📁 จัดการ' : '📤 อัพโหลด'}</button>${memo.docStatus === 'waiting_admin_final' ? `<button onclick="handleAdminFinalize('${refId}')" class="btn btn-xs bg-green-600 hover:bg-green-700 text-white">📦 ไฟนอลและส่งเก็บ</button>` : ''}${canMergePackage ? `<button onclick="downloadAdminMergedPackage('${refId}')" class="btn btn-xs bg-sky-100 text-sky-700 border border-sky-300 hover:bg-sky-200">🧷 รวมส่งเขต</button>` : ''}<button onclick="deleteMemoByAdmin('${refId}', '${gasId}')" class="text-xs text-red-400 hover:text-red-600">🗑️ ลบ</button></div></td>
         </tr>`;
-    }).join('');
+
+        if (compactView) cardItems.push(cardHtml)
+        else tableRows.push(tableHtml)
+    });
+
+    if (tableContainer) tableContainer.innerHTML = compactView ? '' : tableRows.join('');
+    if (cardContainer) cardContainer.innerHTML = compactView ? cardItems.join('') : '';
 }
 
 // --- USER MANAGEMENT ---
@@ -1780,7 +1831,7 @@ async function openDispatchModal(requestId) {
     }
 
     try {
-        toggleLoader('admin-requests-list', true);
+        toggleLoader(isCompactAdminCardView() ? 'admin-requests-cards' : 'admin-requests-table-list', true);
         
         // 2. ดึงข้อมูลคำขอจาก Google Sheets (GAS)
         const result = await apiCall('GET', 'getDraftRequest', { requestId: requestId });
@@ -1925,7 +1976,7 @@ async function openDispatchModal(requestId) {
         console.error(error);
         showAlert('ผิดพลาด', 'ไม่สามารถดึงข้อมูลคำขอได้');
     } finally {
-        toggleLoader('admin-requests-list', false);
+        toggleLoader(isCompactAdminCardView() ? 'admin-requests-cards' : 'admin-requests-table-list', false);
     }
 }
 
@@ -2314,7 +2365,7 @@ function showDualLinkResult(containerId, title, docUrl, pdfUrl) {
 
 async function deleteRequestByAdmin(requestId) {
     if (!await showConfirm("ยืนยันการลบ", `ต้องการลบคำขอ ${requestId} ออกจากระบบ?\n\nการดำเนินการนี้ไม่สามารถยกเลิกได้`)) return;
-    toggleLoader('admin-requests-list', true);
+    toggleLoader(isCompactAdminCardView() ? 'admin-requests-cards' : 'admin-requests-table-list', true);
     try {
         const adminUsername = getCurrentUser()?.username || 'admin';
         const safeId = requestId.replace(/[\/\\:\.]/g, '-');
@@ -2340,7 +2391,7 @@ async function deleteMemoByAdmin(refId, gasId) {
     // gasId  = memo.id ภายใน GAS Sheet (สำหรับ GAS API) — fallback เป็น refId ถ้าไม่มี
     const displayId = refId || gasId;
     if (!await showConfirm("ยืนยันการลบ", `คุณแน่ใจหรือไม่ที่จะลบบันทึกข้อความเลขที่ ${displayId}?`)) return;
-    toggleLoader('admin-memos-list', true);
+    toggleLoader(isCompactAdminCardView() ? 'admin-memos-cards' : 'admin-memos-table-list', true);
     try {
         // ★ ใช้ refId เป็น Firestore key (ตรงกับ doc ที่เก็บข้อมูล request/memo)
         const safeRefId = (refId || gasId).toString().replace(/[\/\\:\.]/g, '-');
@@ -2875,7 +2926,8 @@ function updateBulkToolbar() {
     const checked = document.querySelectorAll('.bulk-checkbox:checked');
     const toolbar = document.getElementById('bulk-toolbar');
     const countEl = document.getElementById('bulk-count');
-    const selectAll = document.getElementById('bulk-select-all');
+    const selectAllDesktop = document.getElementById('bulk-select-all-desktop');
+    const selectAllMobile = document.getElementById('bulk-select-all-mobile');
 
     if (!toolbar) return;
     if (checked.length > 0) {
@@ -2886,7 +2938,11 @@ function updateBulkToolbar() {
     }
 
     const all = document.querySelectorAll('.bulk-checkbox');
-    if (selectAll) selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+    [selectAllDesktop, selectAllMobile].forEach(selectAll => {
+        if (!selectAll) return;
+        selectAll.checked = all.length > 0 && checked.length === all.length;
+        selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+    });
 }
 
 function toggleSelectAll(masterCb) {
@@ -2896,8 +2952,11 @@ function toggleSelectAll(masterCb) {
 
 function clearBulkSelection() {
     document.querySelectorAll('.bulk-checkbox').forEach(cb => { cb.checked = false; });
-    const selectAll = document.getElementById('bulk-select-all');
-    if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; }
+    const selectAllDesktop = document.getElementById('bulk-select-all-desktop');
+    const selectAllMobile = document.getElementById('bulk-select-all-mobile');
+    [selectAllDesktop, selectAllMobile].forEach(selectAll => {
+        if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; }
+    });
     updateBulkToolbar();
 }
 

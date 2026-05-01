@@ -14,12 +14,111 @@
 let sarabanState = {
     pdfBytes:    null,
     docId:       null,
-    docType:     'command',   // 'command' | 'memo'
+    docType:     'command',   // 'command' | 'memo' | 'dispatch'
     scale:       1.5,
     overlayNum:  null,        // DOM element ข้อความเลขที่
     overlayDate: null,        // DOM element ข้อความวันที่
     pdfUrl:      null,        // URL ดู PDF (ใช้ใน memo mode)
 };
+
+function sarabanNeedsNumbering(docType) {
+    return docType === 'command' || docType === 'dispatch';
+}
+
+function getSarabanDocLabel(docType) {
+    if (docType === 'dispatch') return 'หนังสือส่ง';
+    if (docType === 'command') return 'คำสั่งไปราชการ';
+    return 'บันทึกข้อความ';
+}
+
+function getSarabanNumberingLabels(docType) {
+    if (docType === 'dispatch') {
+        return {
+            title: '📦 งานสารบรรณ: ออกเลขหนังสือส่งและวันที่',
+            numLabel: 'เลขที่หนังสือส่ง:',
+            numPlaceholder: 'เช่น ศธ 04001/1234',
+            dateLabel: 'วันที่หนังสือส่ง:',
+            datePlaceholder: 'เช่น 29 เมษายน 2569',
+            instruction: '👉 พิมพ์เลขหนังสือส่งและวันที่ด้านบน — ข้อความจะปรากฏบน PDF ให้ลากวางตำแหน่งที่ต้องการ',
+            previewButton: '👁️ ดูตัวอย่างหนังสือส่ง',
+            successPrefix: 'ออกเลขหนังสือส่ง'
+        };
+    }
+
+    return {
+        title: '📝 งานสารบรรณ: ออกเลขคำสั่งและวันที่',
+        numLabel: 'เลขที่คำสั่ง:',
+        numPlaceholder: 'เช่น 123/2569',
+        dateLabel: 'วันที่คำสั่ง:',
+        datePlaceholder: 'เช่น 29 เมษายน 2569',
+        instruction: '👉 พิมพ์เลขคำสั่งและวันที่ด้านบน — ข้อความจะปรากฏบน PDF ให้ลากวางตำแหน่งที่ต้องการ',
+        previewButton: '👁️ ดูตัวอย่างคำสั่ง',
+        successPrefix: 'ออกเลขคำสั่ง'
+    };
+}
+
+function buildSarabanFirestoreUpdate(newPdfUrl, user, docNum = '', docDate = '') {
+    const update = {
+        docStatus:        'waiting_director',
+        docType:          sarabanState.docType,
+        activeApprovalDocType: sarabanState.docType,
+        currentPdfUrl:    newPdfUrl,
+        lastUpdated:      firebase.firestore.FieldValue.serverTimestamp(),
+    };
+
+    if (docNum) update.sarabanDocNum = docNum;
+    if (docDate) update.sarabanDocDate = docDate;
+
+    if (sarabanNeedsNumbering(sarabanState.docType)) {
+        update.sarabanStampedAt = firebase.firestore.FieldValue.serverTimestamp();
+        update.sarabanStampedBy = user?.name || user?.username || 'saraban';
+    } else {
+        update.sarabanVerifiedAt = firebase.firestore.FieldValue.serverTimestamp();
+        update.sarabanVerifiedBy = user?.name || user?.username || 'saraban';
+    }
+
+    if (sarabanState.docType === 'dispatch') {
+        update.dispatchBookUrl = newPdfUrl;
+        update.dispatchBookPdfUrl = newPdfUrl;
+        update.dispatchStatus = 'waiting_director';
+    } else if (sarabanState.docType === 'command') {
+        update.commandPdfUrl = newPdfUrl;
+        update.commandStatus = 'waiting_director';
+    } else {
+        update.pdfUrl = newPdfUrl;
+        update.memoPdfUrl = newPdfUrl;
+        update.completedMemoUrl = newPdfUrl;
+    }
+
+    return update;
+}
+
+function buildSarabanSheetPayload(newPdfUrl, docNum = '', docDate = '') {
+    const payload = {
+        requestId: sarabanState.docId,
+        docStatus: 'waiting_director',
+        docType: sarabanState.docType,
+        activeApprovalDocType: sarabanState.docType,
+        currentPdfUrl: newPdfUrl,
+    };
+
+    if (docNum) payload.refNumber = docNum;
+    if (docDate) payload.sarabanDocDate = docDate;
+
+    if (sarabanState.docType === 'dispatch') {
+        payload.dispatchBookUrl = newPdfUrl;
+        payload.dispatchBookPdfUrl = newPdfUrl;
+        payload.dispatchStatus = 'waiting_director';
+    } else if (sarabanState.docType === 'command') {
+        payload.commandPdfUrl = newPdfUrl;
+        payload.commandStatus = 'waiting_director';
+    } else {
+        payload.pdfUrl = newPdfUrl;
+        payload.completedMemoUrl = newPdfUrl;
+    }
+
+    return payload;
+}
 
 // ============================================================
 // 1. เปิด Modal
@@ -111,23 +210,38 @@ async function openSarabanModal(pdfDataBytes, documentId, docType = 'command', p
 
 // ตั้ง UI ตาม docType
 function _setSarabanMode(docType, pdfUrl) {
-    const isCmd = (docType === 'command');
+    const needsNumbering = sarabanNeedsNumbering(docType);
+    const numberingUi = getSarabanNumberingLabels(docType);
+    const numLabelEl = document.getElementById('saraban-doc-num-label');
+    const numInputEl = document.getElementById('saraban-doc-num');
+    const dateLabelEl = document.getElementById('saraban-doc-date-label');
+    const dateInputEl = document.getElementById('saraban-doc-date');
+    const instructionEl = document.getElementById('saraban-instruction');
+    const memoTextEl = document.getElementById('saraban-memo-panel-text');
 
-    document.getElementById('saraban-command-panel').classList.toggle('hidden', !isCmd);
-    document.getElementById('saraban-memo-panel').classList.toggle('hidden',  isCmd);
-    document.getElementById('saraban-cmd-buttons').classList.toggle('hidden', !isCmd);
-    document.getElementById('saraban-memo-buttons').classList.toggle('hidden', isCmd);
+    document.getElementById('saraban-command-panel').classList.toggle('hidden', !needsNumbering);
+    document.getElementById('saraban-memo-panel').classList.toggle('hidden',  needsNumbering);
+    document.getElementById('saraban-cmd-buttons').classList.toggle('hidden', !needsNumbering);
+    document.getElementById('saraban-memo-buttons').classList.toggle('hidden', needsNumbering);
 
-    document.getElementById('saraban-modal-title').textContent = isCmd
-        ? '📝 งานสารบรรณ: ออกเลขที่และวันที่'
+    const modalTitle = needsNumbering
+        ? numberingUi.title
         : '📄 งานสารบรรณ: ตรวจสอบบันทึกข้อความ';
+    document.getElementById('saraban-modal-title').textContent = modalTitle;
 
-    document.getElementById('btn-saraban-confirm').textContent = isCmd
-        ? '👁️ ดูตัวอย่างก่อนส่ง'
+    if (numLabelEl) numLabelEl.textContent = numberingUi.numLabel;
+    if (numInputEl) numInputEl.placeholder = numberingUi.numPlaceholder;
+    if (dateLabelEl) dateLabelEl.textContent = numberingUi.dateLabel;
+    if (dateInputEl) dateInputEl.placeholder = numberingUi.datePlaceholder;
+    if (instructionEl) instructionEl.textContent = numberingUi.instruction;
+    if (memoTextEl) memoTextEl.textContent = '📄 บันทึกข้อความ — ตรวจสอบเอกสารแล้วกดยืนยันส่งผู้อำนวยการ';
+
+    document.getElementById('btn-saraban-confirm').textContent = needsNumbering
+        ? numberingUi.previewButton
         : '✅ ยืนยันส่งผู้อำนวยการ';
 
     // memo mode: ตั้ง link ดู PDF
-    if (!isCmd && pdfUrl) {
+    if (!needsNumbering && pdfUrl) {
         const link = document.getElementById('saraban-memo-view-link');
         if (link) link.href = pdfUrl;
     }
@@ -142,7 +256,7 @@ function closeSarabanModal() {
 //    เรียกจาก input event ที่ผูกไว้ใน DOMContentLoaded
 // ============================================================
 function _updateSarabanOverlay(type) {
-    if (sarabanState.docType !== 'command') return;
+    if (!sarabanNeedsNumbering(sarabanState.docType)) return;
 
     const inputId  = type === 'num' ? 'saraban-doc-num' : 'saraban-doc-date';
     const rawText  = document.getElementById(inputId).value.trim();
@@ -267,7 +381,7 @@ function resetSarabanMarkers() { resetSarabanOverlays(); }
 // 4. ยืนยัน — router ตาม docType
 // ============================================================
 async function applySarabanAction() {
-    if (sarabanState.docType === 'command') {
+    if (sarabanNeedsNumbering(sarabanState.docType)) {
         await _previewSarabanCommand(); // Phase 1: แสดงตัวอย่างก่อน
     } else {
         await _applySarabanMemoForward();
@@ -430,18 +544,7 @@ async function _confirmSarabanUpload() {
         );
 
         if (typeof db !== 'undefined') {
-            const sarabanUpdate = {
-                pdfUrl:           newPdfUrl,
-                currentPdfUrl:    newPdfUrl,
-                memoPdfUrl:       newPdfUrl,
-                completedMemoUrl: newPdfUrl,
-                docStatus:        'waiting_director',
-                sarabanDocNum:    docNum,
-                sarabanDocDate:   docDate,
-                sarabanStampedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                sarabanStampedBy: user?.name || user?.username || 'saraban',
-                lastUpdated:      firebase.firestore.FieldValue.serverTimestamp(),
-            };
+            const sarabanUpdate = buildSarabanFirestoreUpdate(newPdfUrl, user, docNum, docDate);
             // คำนวณ base64 จาก previewBlob เพื่อ cache ให้ผู้อำนวยการโหลดได้เร็ว
             try {
                 const sarabanBase64 = await blobToBase64(sarabanState.previewBlob);
@@ -452,12 +555,8 @@ async function _confirmSarabanUpload() {
             await db.collection('requests').doc(safeId).set(sarabanUpdate, { merge: true });
         }
 
-        apiCall('POST', 'updateRequest', {
-            requestId: sarabanState.docId,
-            pdfUrl:    newPdfUrl,
-            docStatus: 'waiting_director',
-            refNumber: docNum,
-        }).catch(e => console.warn('Sheet update error:', e));
+        apiCall('POST', 'updateRequest', buildSarabanSheetPayload(newPdfUrl, docNum, docDate))
+            .catch(e => console.warn('Sheet update error:', e));
 
         document.getElementById('alert-modal').style.display = 'none';
         closeSarabanModal();
@@ -468,7 +567,7 @@ async function _confirmSarabanUpload() {
                 showTokenSignSuccess('waiting_director', null);
         } else {
             showAlert('✅ สำเร็จ',
-                `ออกเลขที่ ${sarabanState.previewDocNum} เรียบร้อย เอกสารส่งไปยังผู้อำนวยการแล้ว`);
+                `${getSarabanNumberingLabels(sarabanState.docType).successPrefix} ${sarabanState.previewDocNum} เรียบร้อย เอกสารส่งไปยังผู้อำนวยการแล้ว`);
             if (typeof loadPendingApprovals === 'function') loadPendingApprovals();
         }
 
@@ -574,30 +673,15 @@ async function _applySarabanCommandStamps() {
         );
 
         if (typeof db !== 'undefined') {
-            const sarabanUpdate = {
-                pdfUrl:           newPdfUrl,
-                currentPdfUrl:    newPdfUrl,
-                memoPdfUrl:       newPdfUrl,
-                completedMemoUrl: newPdfUrl,
-                docStatus:        'waiting_director',
-                sarabanDocNum:    docNum,
-                sarabanDocDate:   docDate,
-                sarabanStampedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                sarabanStampedBy: user?.name || user?.username || 'saraban',
-                lastUpdated:      firebase.firestore.FieldValue.serverTimestamp(),
-            };
+            const sarabanUpdate = buildSarabanFirestoreUpdate(newPdfUrl, user, docNum, docDate);
             if (typeof sarabanBase64 === 'string' && sarabanBase64.length > 0 && sarabanBase64.length <= 900_000) {
                 sarabanUpdate.pdfBase64 = sarabanBase64;
             }
             await db.collection('requests').doc(safeId).set(sarabanUpdate, { merge: true });
         }
 
-        apiCall('POST', 'updateRequest', {
-            requestId: sarabanState.docId,
-            pdfUrl:    newPdfUrl,
-            docStatus: 'waiting_director',
-            refNumber: docNum,
-        }).catch(e => console.warn('Sheet update error:', e));
+        apiCall('POST', 'updateRequest', buildSarabanSheetPayload(newPdfUrl, docNum, docDate))
+            .catch(e => console.warn('Sheet update error:', e));
 
         document.getElementById('alert-modal').style.display = 'none';
         closeSarabanModal();
@@ -608,7 +692,7 @@ async function _applySarabanCommandStamps() {
                 showTokenSignSuccess('waiting_director', null);
         } else {
             showAlert('✅ สำเร็จ',
-                `ออกเลขที่ ${thaiNum} เรียบร้อย เอกสารส่งไปยังผู้อำนวยการแล้ว`);
+                `${getSarabanNumberingLabels(sarabanState.docType).successPrefix} ${thaiNum} เรียบร้อย เอกสารส่งไปยังผู้อำนวยการแล้ว`);
             if (typeof loadPendingApprovals === 'function') loadPendingApprovals();
         }
 
@@ -635,6 +719,8 @@ async function _applySarabanMemoForward() {
         if (typeof db !== 'undefined') {
             await db.collection('requests').doc(safeId).set({
                 docStatus:          'waiting_director',
+                docType:            'memo',
+                activeApprovalDocType: 'memo',
                 sarabanVerifiedAt:  firebase.firestore.FieldValue.serverTimestamp(),
                 sarabanVerifiedBy:  user?.name || user?.username || 'saraban',
                 lastUpdated:        firebase.firestore.FieldValue.serverTimestamp(),

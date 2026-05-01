@@ -103,10 +103,32 @@ function _generateTokenId() {
 
 // --- 2. สร้าง Approval Token ใน Firestore และคืนค่า URL ---
 async function generateApprovalToken(requestId, nextDocStatus, docMeta) {
-    if (typeof db === 'undefined' || !requestId || !nextDocStatus) return null;
+    if (!requestId || !nextDocStatus) return null;
 
     const token  = _generateTokenId();
     const safeId = requestId.replace(/[\/\\:\.]/g, '-');
+    const base = window.location.origin + window.location.pathname;
+    const createViaGas = async () => {
+        const result = await apiCall('POST', 'createApprovalLinkToken', {
+            token,
+            requestId,
+            safeId,
+            docStatus: nextDocStatus,
+            docTitle: docMeta?.purpose || docMeta?.docTitle || '',
+            requester: docMeta?.requesterName || '',
+        });
+        const tokenValue = result?.data?.token || token;
+        return `${base}?sign=${tokenValue}`;
+    };
+
+    if (typeof db === 'undefined') {
+        try {
+            return await createViaGas();
+        } catch (e) {
+            console.warn("generateApprovalToken GAS fallback error:", e);
+            return null;
+        }
+    }
 
     try {
         await db.collection('approvalLinks').doc(token).set({
@@ -119,11 +141,15 @@ async function generateApprovalToken(requestId, nextDocStatus, docMeta) {
             expiresAt:  new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 วัน
             used:       false,
         });
-        const base = window.location.origin + window.location.pathname;
         return `${base}?sign=${token}`;
     } catch (e) {
         console.warn("generateApprovalToken error:", e);
-        return null;
+        try {
+            return await createViaGas();
+        } catch (fallbackError) {
+            console.warn("generateApprovalToken GAS fallback error:", fallbackError);
+            return null;
+        }
     }
 }
 
@@ -217,15 +243,72 @@ function showApprovalLinkDialog(url, recipientLabel, docMeta = {}, currentStatus
 // --- 4. Mark token as used (เรียกหลังลงนามสำเร็จ) ---
 async function markCurrentTokenUsed() {
     const token = window._currentSignToken;
-    if (!token || typeof db === 'undefined') return;
+    if (!token) return;
     try {
-        await db.collection('approvalLinks').doc(token).update({ used: true });
+        if (typeof db !== 'undefined') {
+            await db.collection('approvalLinks').doc(token).update({ used: true });
+        } else {
+            await apiCall('POST', 'markApprovalLinkTokenUsed', { token });
+        }
     } catch (e) {
         console.warn("markCurrentTokenUsed error:", e);
+        try {
+            await apiCall('POST', 'markApprovalLinkTokenUsed', { token });
+        } catch (fallbackError) {
+            console.warn("markCurrentTokenUsed GAS fallback error:", fallbackError);
+        }
     }
     window._currentSignToken     = null;
     window._currentSignTokenData = null;
     window._currentSignReqData   = null;
+}
+
+function _approvalTokenExpiryDate(tokenData) {
+    if (!tokenData?.expiresAt) return null;
+    if (typeof tokenData.expiresAt?.toDate === 'function') return tokenData.expiresAt.toDate();
+    const raw = tokenData.expiresAtMs || tokenData.expiresAt;
+    const parsed = new Date(raw);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+async function _fetchApprovalTokenData(token) {
+    if (typeof db !== 'undefined') {
+        try {
+            const tokenDoc = await db.collection('approvalLinks').doc(token).get();
+            if (tokenDoc.exists) return tokenDoc.data();
+        } catch (e) {
+            console.warn('fetchApprovalTokenData firestore error:', e);
+        }
+    }
+    const result = await apiCall('GET', 'getApprovalLinkToken', { token });
+    return result?.data || null;
+}
+
+async function _fetchApprovalRequestData(tokenData) {
+    if (!tokenData) return null;
+
+    if (typeof db !== 'undefined' && tokenData.safeId) {
+        try {
+            const reqDoc = await db.collection('requests').doc(tokenData.safeId).get();
+            if (reqDoc.exists) return reqDoc.data();
+        } catch (e) {
+            console.warn('fetchApprovalRequestData firestore error:', e);
+        }
+    }
+
+    if (tokenData.requestId) {
+        try {
+            const result = await apiCall('GET', 'getDraftRequest', { requestId: tokenData.requestId });
+            if (result?.data) return result.data;
+            if (result && !result.status) return result;
+        } catch (e) {
+            console.warn('fetchApprovalRequestData draft fallback error:', e);
+        }
+    }
+
+    const requestsResult = await apiCall('GET', 'getAllRequests').catch(() => ({ status: 'error', data: [] }));
+    const requestList = Array.isArray(requestsResult?.data) ? requestsResult.data : [];
+    return requestList.find(item => String(item.id || item.requestId || '') === String(tokenData.requestId || '')) || null;
 }
 
 // --- 5. แสดงผลสำเร็จบน Token Page พร้อมลิงก์ขั้นถัดไป ---
@@ -286,28 +369,18 @@ async function handleTokenSignFlow(token) {
     const contentEl = document.getElementById('token-content');
     const errorEl   = document.getElementById('token-error');
 
-    // รอ Firebase โหลด (max 5 วินาที)
-    let retries = 0;
-    while (typeof db === 'undefined' && retries < 50) {
-        await new Promise(r => setTimeout(r, 100));
-        retries++;
-    }
-
     try {
-        if (typeof db === 'undefined') throw new Error("ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
-
-        const tokenDoc = await db.collection('approvalLinks').doc(token).get();
-        if (!tokenDoc.exists) throw new Error("ลิงก์ไม่ถูกต้อง หรือไม่พบในระบบ");
-
-        const td = tokenDoc.data();
+        const td = await _fetchApprovalTokenData(token);
+        if (!td) throw new Error("ลิงก์ไม่ถูกต้อง หรือไม่พบในระบบ");
         if (td.used) throw new Error("ลิงก์นี้ถูกใช้งานไปแล้ว เอกสารได้รับการดำเนินการเรียบร้อยแล้ว");
-        if (td.expiresAt && new Date() > td.expiresAt.toDate()) {
+        const expiryDate = _approvalTokenExpiryDate(td);
+        if (expiryDate && new Date() > expiryDate) {
             throw new Error("ลิงก์หมดอายุแล้ว (เกิน 7 วัน) กรุณาขอลิงก์ใหม่จากผู้ส่ง");
         }
 
         // แจ้งเตือนถ้าลิงก์ใกล้หมดอายุ (น้อยกว่า 24 ชั่วโมง)
-        if (td.expiresAt) {
-            const msLeft = td.expiresAt.toDate() - new Date();
+        if (expiryDate) {
+            const msLeft = expiryDate - new Date();
             if (msLeft > 0 && msLeft < 24 * 60 * 60 * 1000) {
                 const hoursLeft = Math.max(1, Math.floor(msLeft / (60 * 60 * 1000)));
                 const warningBanner = document.createElement('div');
@@ -318,10 +391,8 @@ async function handleTokenSignFlow(token) {
             }
         }
 
-        const reqDoc = await db.collection('requests').doc(td.safeId).get();
-        if (!reqDoc.exists) throw new Error("ไม่พบเอกสารในระบบ");
-
-        const req    = reqDoc.data();
+        const req = await _fetchApprovalRequestData(td);
+        if (!req) throw new Error("ไม่พบเอกสารในระบบ");
         // ★ ลำดับความสำคัญ:
         //   1. completedMemoUrl = ไฟล์รวมทุกเอกสาร (บันทึก + แนบ) — อัปเดตทุกรอบลงนาม
         //   2. currentPdfUrl   = ไฟล์ล่าสุดหลังเซ็น (fallback ถ้า completedMemoUrl ยังไม่มี)
@@ -492,19 +563,32 @@ async function tokenAdminForward() {
     }
     try {
         showAlert('กำลังดำเนินการ', 'กำลังส่งเอกสารไปงานสารบรรณ...', false);
+        let firestoreUpdated = false;
         if (typeof db !== 'undefined') {
             await db.collection('requests').doc(td.safeId).set({
                 docStatus:       'waiting_saraban',
                 adminReviewedAt: firebase.firestore.FieldValue.serverTimestamp(),
             }, { merge: true });
+            firestoreUpdated = true;
         }
-        apiCall('POST', 'updateRequest', { requestId: td.requestId, docStatus: 'waiting_saraban' })
-            .catch(e => console.warn(e));
+        if (!firestoreUpdated) {
+            console.warn('tokenAdminForward proceeding with GAS-only update');
+        }
+        apiCall('POST', 'updateRequest', { requestId: td.requestId, docStatus: 'waiting_saraban' }).catch(e => console.warn(e));
         await markCurrentTokenUsed();
 
         document.getElementById('alert-modal').style.display = 'none';
         showTokenSignSuccess('waiting_saraban', null);
     } catch (e) {
+        try {
+            await apiCall('POST', 'updateRequest', { requestId: td.requestId, docStatus: 'waiting_saraban' });
+            await markCurrentTokenUsed();
+            document.getElementById('alert-modal').style.display = 'none';
+            showTokenSignSuccess('waiting_saraban', null);
+            return;
+        } catch (fallbackError) {
+            console.warn('tokenAdminForward fallback error:', fallbackError);
+        }
         document.getElementById('alert-modal').style.display = 'none';
         alert("เกิดข้อผิดพลาด: " + e.message);
     }
@@ -517,6 +601,190 @@ async function tokenAdminForward() {
 // Cache เอกสารสำหรับหน้าจัดการลิงก์
 window._adminApprovalDocs = {};
 
+function _getApprovalStatusOrder() {
+    return [
+        'waiting_head_thai',      'waiting_head_foreign',   'waiting_head_science',
+        'waiting_head_art',       'waiting_head_social',    'waiting_head_health',
+        'waiting_head_career',    'waiting_head_math',
+        'waiting_head_guidance',  'waiting_head_general',
+        'waiting_head_personnel', 'waiting_head_budget',    'waiting_head_acad',
+        'waiting_deputy_personnel',  'waiting_deputy_acad',
+        'waiting_deputy_general',    'waiting_deputy_budget',
+        'waiting_admin_review',   'waiting_saraban',        'waiting_director',
+        'waiting_admin_final',
+    ];
+}
+
+function _getApprovalGroupMeta() {
+    const O = 'border-orange-300 bg-orange-50';
+    const Ob = 'bg-orange-100 text-orange-700';
+    const B = 'border-blue-300 bg-blue-50';
+    const Bb = 'bg-blue-100 text-blue-700';
+    return {
+        'waiting_head_thai':      { label: 'หัวหน้ากลุ่มสาระภาษาไทย',           color: O, badge: Ob },
+        'waiting_head_foreign':   { label: 'หัวหน้ากลุ่มสาระภาษาต่างประเทศ',    color: O, badge: Ob },
+        'waiting_head_science':   { label: 'หัวหน้ากลุ่มสาระวิทยาศาสตร์ฯ',      color: O, badge: Ob },
+        'waiting_head_art':       { label: 'หัวหน้ากลุ่มสาระศิลปะ',             color: O, badge: Ob },
+        'waiting_head_social':    { label: 'หัวหน้ากลุ่มสาระสังคมศึกษาฯ',       color: O, badge: Ob },
+        'waiting_head_health':    { label: 'หัวหน้ากลุ่มสาระสุขศึกษาฯ',         color: O, badge: Ob },
+        'waiting_head_career':    { label: 'หัวหน้ากลุ่มสาระการงานอาชีพ',       color: O, badge: Ob },
+        'waiting_head_math':      { label: 'หัวหน้ากลุ่มสาระคณิตศาสตร์',        color: O, badge: Ob },
+        'waiting_head_guidance':  { label: 'หัวหน้างานแนะแนว',                  color: O, badge: Ob },
+        'waiting_head_general':   { label: 'หัวหน้ากลุ่มบริหารทั่วไป',           color: O, badge: Ob },
+        'waiting_head_personnel': { label: 'หัวหน้ากลุ่มบริหารงานบุคคล',         color: O, badge: Ob },
+        'waiting_head_budget':    { label: 'หัวหน้ากลุ่มบริหารงบประมาณ',         color: O, badge: Ob },
+        'waiting_head_acad':      { label: 'หัวหน้ากลุ่มบริหารวิชาการ',          color: O, badge: Ob },
+        'waiting_deputy_personnel':  { label: 'รองผู้อำนวยการ กลุ่มบริหารงานบุคคล', color: B, badge: Bb },
+        'waiting_deputy_acad':       { label: 'รองผู้อำนวยการ กลุ่มบริหารวิชาการ',  color: B, badge: Bb },
+        'waiting_deputy_general':    { label: 'รองผู้อำนวยการ กลุ่มบริหารทั่วไป',   color: B, badge: Bb },
+        'waiting_deputy_budget':     { label: 'รองผู้อำนวยการ กลุ่มบริหารงบประมาณ', color: B, badge: Bb },
+        'waiting_admin_review':   { label: 'แอดมิน (ตรวจสอบก่อนส่งสารบรรณ)',    color: 'border-yellow-300 bg-yellow-50', badge: 'bg-yellow-100 text-yellow-700' },
+        'waiting_saraban':        { label: 'งานสารบรรณ',                         color: 'border-indigo-300 bg-indigo-50', badge: 'bg-indigo-100 text-indigo-700' },
+        'waiting_director':       { label: 'ผู้อำนวยการ (ลงนาม)',                color: 'border-red-300 bg-red-50',       badge: 'bg-red-100 text-red-700' },
+        'waiting_admin_final':    { label: 'แอดมิน (ไฟนอลงาน)',                  color: 'border-green-300 bg-green-50',   badge: 'bg-green-100 text-green-700' },
+    };
+}
+
+function _cacheApprovalDocs(allDocs = []) {
+    window._adminApprovalDocs = {};
+    allDocs.forEach(doc => {
+        const safeKey = String(doc.safeId || doc.safeKey || '').trim();
+        const originalId = String(doc.id || doc.requestId || doc.refNumber || '').trim();
+        if (safeKey) window._adminApprovalDocs[safeKey] = doc;
+        if (originalId) window._adminApprovalDocs[originalId] = doc;
+        if (doc.requestId) window._adminApprovalDocs[String(doc.requestId)] = doc;
+    });
+}
+
+function _renderApprovalLinkManagementDocs(container, allDocs, sourceLabel = '') {
+    _cacheApprovalDocs(allDocs);
+
+    if (!allDocs.length) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-gray-400">
+            <div class="text-5xl mb-3">📭</div>
+            <p class="text-lg font-medium">ไม่มีเอกสารรอดำเนินการ</p>
+            <p class="text-sm mt-1">เอกสารทั้งหมดได้รับการดำเนินการเรียบร้อยแล้ว</p>
+          </div>`;
+        return;
+    }
+
+    const grouped = {};
+    allDocs.forEach(doc => {
+        const s = doc.docStatus || 'unknown';
+        if (!grouped[s]) grouped[s] = [];
+        grouped[s].push(doc);
+    });
+
+    const statusOrder = _getApprovalStatusOrder();
+    const groupMeta = _getApprovalGroupMeta();
+    let html = sourceLabel
+        ? `<div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">⚠️ กำลังใช้ข้อมูลสำรองจาก ${sourceLabel} เนื่องจากสิทธิ์ Firestore ไม่เพียงพอสำหรับการ query ตรง</div>`
+        : '';
+
+    statusOrder.forEach(status => {
+        const items = grouped[status];
+        if (!items || items.length === 0) return;
+        const meta = groupMeta[status] || { label: status, color: 'border-gray-300 bg-gray-50', badge: 'bg-gray-100 text-gray-700' };
+
+        html += `
+        <div class="border-2 ${meta.color} rounded-xl p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-gray-700 flex items-center gap-2 text-sm sm:text-base">
+              🔐 รอลงนาม: <span class="text-blue-700">${meta.label}</span>
+            </h3>
+            <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold ${meta.badge} whitespace-nowrap">${items.length} รายการ</span>
+          </div>
+          <div class="space-y-2">`;
+
+        items.forEach(doc => {
+            const purpose = String(doc.purpose || 'เอกสารไปราชการ').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const requester = String(doc.requesterName || '-').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+            const date = doc.startDate || doc.date || doc.docDate || '-';
+            const docId = doc.safeId || doc.safeKey || doc.id;
+            const docType = _getApprovalManagedDocType(doc, status);
+            const docLabel = _getApprovalDocTypeLabel(docType);
+            const needsCommandFirst = typeof memoRequiresCommandBeforeSaraban === 'function'
+                && memoRequiresCommandBeforeSaraban(doc, status);
+            const escapedDocId = String(docId || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const buttonDomId = `alm-btn-${String(docId || '').replace(/[^A-Za-z0-9_-]/g, '_')}`;
+            const typeBadgeCls = docType === 'dispatch'
+                ? 'bg-rose-100 text-rose-700'
+                : (docType === 'command' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700');
+
+            html += `
+            <div class="bg-white rounded-lg border border-gray-200 p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex flex-wrap items-center gap-2 mb-1">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${typeBadgeCls}">${docLabel}</span>
+                  ${needsCommandFirst ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">ต้องสร้างคำสั่งก่อนส่งสารบรรณ</span>' : ''}
+                </div>
+                <p class="font-medium text-gray-800 text-sm truncate">${purpose}</p>
+                <p class="text-xs text-gray-500 mt-0.5">ผู้ขอ: ${requester} &nbsp;|&nbsp; วันที่: ${date}</p>
+              </div>
+              <div class="flex flex-col sm:flex-row gap-1.5 flex-shrink-0">
+                ${needsCommandFirst ? `
+                <button
+                  onclick="openAdminGenerateCommand('${escapedDocId}')"
+                  class="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap">
+                  📝 สร้างคำสั่งก่อน
+                </button>` : `
+                <button id="${buttonDomId}"
+                  onclick="adminGenerateLink(this, '${escapedDocId}', '${status}')"
+                  class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors">
+                  🔗 สร้างลิงก์ส่งให้
+                </button>`}
+                ${status !== 'waiting_admin_review' ? `<button
+                  onclick="adminSkipStep('${escapedDocId}', '${status}')"
+                  class="w-full sm:w-auto px-3 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap">
+                  ⏭️ ข้ามขั้นตอนนี้
+                </button>` : ''}
+              </div>
+            </div>`;
+        });
+
+        html += `</div></div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+async function _loadApprovalDocsFromGasFallback() {
+    const statuses = new Set(_getApprovalStatusOrder());
+    const [requestsResult, memosResult] = await Promise.all([
+        apiCall('GET', 'getAllRequests').catch(() => ({ status: 'error', data: [] })),
+        apiCall('GET', 'getAllMemos').catch(() => ({ status: 'error', data: [] })),
+    ]);
+
+    const docs = [];
+    const seen = new Set();
+
+    const pushDoc = (raw, sourceType) => {
+        const docStatus = raw.docStatus || raw.statusFlow || '';
+        if (!statuses.has(docStatus)) return;
+        const originalId = raw.id || raw.requestId || raw.refNumber || '';
+        const safeId = String(originalId).replace(/[\/\\:\.]/g, '-');
+        const key = `${sourceType}:${safeId || originalId}`;
+        if (!originalId || seen.has(key)) return;
+        seen.add(key);
+        docs.push({
+            ...raw,
+            sourceType,
+            safeId,
+            requestId: raw.requestId || raw.id || raw.refNumber || '',
+            id: originalId,
+            requesterName: raw.requesterName || raw.submittedBy || raw.username || '',
+            purpose: raw.purpose || raw.subject || raw.docTitle || '',
+            startDate: raw.startDate || raw.date || '',
+            docDate: raw.docDate || raw.date || '',
+        });
+    };
+
+    (requestsResult.data || []).forEach(item => pushDoc(item, 'request'));
+    (memosResult.data || []).forEach(item => pushDoc(item, 'memo'));
+    return docs;
+}
+
 // --- 9. Admin: โหลดและแสดงหน้าจัดการลิงก์ลงนาม ---
 async function loadApprovalLinkManagement() {
     if (typeof switchPage === 'function') switchPage('admin-approval-links-page');
@@ -526,7 +794,12 @@ async function loadApprovalLinkManagement() {
     container.innerHTML = '<div class="flex justify-center py-10"><div class="loader"></div></div>';
 
     if (typeof db === 'undefined') {
-        container.innerHTML = '<p class="text-center text-red-500 py-8">ไม่สามารถเชื่อมต่อฐานข้อมูลได้</p>';
+        try {
+            const fallbackDocs = await _loadApprovalDocsFromGasFallback();
+            _renderApprovalLinkManagementDocs(container, fallbackDocs, 'Google Sheets / GAS');
+        } catch (e) {
+            container.innerHTML = '<p class="text-center text-red-500 py-8">ไม่สามารถเชื่อมต่อฐานข้อมูลได้</p>';
+        }
         return;
     }
 
@@ -551,149 +824,31 @@ async function loadApprovalLinkManagement() {
             db.collection('requests').where('docStatus', 'in', batch3).get(),
         ]);
 
-        // รวมผลลัพธ์ + เก็บ cache
-        window._adminApprovalDocs = {};
         const allDocs = [];
         [snap1, snap2, snap3].forEach(snap => {
             snap.docs.forEach(doc => {
                 const data = doc.data();
-                window._adminApprovalDocs[doc.id] = data;
-                if (data.id) window._adminApprovalDocs[data.id] = data;
-                if (data.requestId) window._adminApprovalDocs[data.requestId] = data;
-                allDocs.push({ id: doc.id, ...data });
+                allDocs.push({ safeId: doc.id, id: data.id || data.requestId || doc.id, ...data });
             });
         });
-
-        if (allDocs.length === 0) {
-            container.innerHTML = `
-              <div class="text-center py-12 text-gray-400">
-                <div class="text-5xl mb-3">📭</div>
-                <p class="text-lg font-medium">ไม่มีเอกสารรอดำเนินการ</p>
-                <p class="text-sm mt-1">เอกสารทั้งหมดได้รับการดำเนินการเรียบร้อยแล้ว</p>
-              </div>`;
-            return;
-        }
-
-        // จัดกลุ่มตาม docStatus
-        const grouped = {};
-        allDocs.forEach(doc => {
-            const s = doc.docStatus || 'unknown';
-            if (!grouped[s]) grouped[s] = [];
-            grouped[s].push(doc);
-        });
-
-        // ลำดับ status ทั้งหมด
-        const statusOrder = [
-            'waiting_head_thai',      'waiting_head_foreign',   'waiting_head_science',
-            'waiting_head_art',       'waiting_head_social',    'waiting_head_health',
-            'waiting_head_career',    'waiting_head_math',
-            'waiting_head_guidance',  'waiting_head_general',
-            'waiting_head_personnel', 'waiting_head_budget',    'waiting_head_acad',
-            'waiting_deputy_personnel',  'waiting_deputy_acad',
-            'waiting_deputy_general',    'waiting_deputy_budget',
-            'waiting_admin_review',   'waiting_saraban',        'waiting_director',
-        ];
-
-        const O = 'border-orange-300 bg-orange-50';
-        const Ob = 'bg-orange-100 text-orange-700';
-        const B = 'border-blue-300 bg-blue-50';
-        const Bb = 'bg-blue-100 text-blue-700';
-        const groupMeta = {
-            'waiting_head_thai':      { label: 'หัวหน้ากลุ่มสาระภาษาไทย',           color: O, badge: Ob },
-            'waiting_head_foreign':   { label: 'หัวหน้ากลุ่มสาระภาษาต่างประเทศ',    color: O, badge: Ob },
-            'waiting_head_science':   { label: 'หัวหน้ากลุ่มสาระวิทยาศาสตร์ฯ',      color: O, badge: Ob },
-            'waiting_head_art':       { label: 'หัวหน้ากลุ่มสาระศิลปะ',             color: O, badge: Ob },
-            'waiting_head_social':    { label: 'หัวหน้ากลุ่มสาระสังคมศึกษาฯ',       color: O, badge: Ob },
-            'waiting_head_health':    { label: 'หัวหน้ากลุ่มสาระสุขศึกษาฯ',         color: O, badge: Ob },
-            'waiting_head_career':    { label: 'หัวหน้ากลุ่มสาระการงานอาชีพ',       color: O, badge: Ob },
-            'waiting_head_math':      { label: 'หัวหน้ากลุ่มสาระคณิตศาสตร์',        color: O, badge: Ob },
-            'waiting_head_guidance':  { label: 'หัวหน้างานแนะแนว',                  color: O, badge: Ob },
-            'waiting_head_general':   { label: 'หัวหน้ากลุ่มบริหารทั่วไป',           color: O, badge: Ob },
-            'waiting_head_personnel': { label: 'หัวหน้ากลุ่มบริหารงานบุคคล',         color: O, badge: Ob },
-            'waiting_head_budget':    { label: 'หัวหน้ากลุ่มบริหารงบประมาณ',         color: O, badge: Ob },
-            'waiting_head_acad':      { label: 'หัวหน้ากลุ่มบริหารวิชาการ',          color: O, badge: Ob },
-            'waiting_deputy_personnel':  { label: 'รองผู้อำนวยการ กลุ่มบริหารงานบุคคล', color: B, badge: Bb },
-            'waiting_deputy_acad':       { label: 'รองผู้อำนวยการ กลุ่มบริหารวิชาการ',  color: B, badge: Bb },
-            'waiting_deputy_general':    { label: 'รองผู้อำนวยการ กลุ่มบริหารทั่วไป',   color: B, badge: Bb },
-            'waiting_deputy_budget':     { label: 'รองผู้อำนวยการ กลุ่มบริหารงบประมาณ', color: B, badge: Bb },
-            'waiting_admin_review':   { label: 'แอดมิน (ตรวจสอบก่อนส่งสารบรรณ)',    color: 'border-yellow-300 bg-yellow-50', badge: 'bg-yellow-100 text-yellow-700' },
-            'waiting_saraban':        { label: 'งานสารบรรณ',                         color: 'border-indigo-300 bg-indigo-50', badge: 'bg-indigo-100 text-indigo-700' },
-            'waiting_director':       { label: 'ผู้อำนวยการ (ลงนาม)',                color: 'border-red-300 bg-red-50',       badge: 'bg-red-100 text-red-700'       },
-            'waiting_admin_final':  { label: 'แอดมิน (ไฟนล์งาน)',              color: 'border-green-300 bg-green-50',  badge: 'bg-green-100 text-green-700' },
-        };
-
-        let html = '';
-        statusOrder.forEach(status => {
-            const items = grouped[status];
-            if (!items || items.length === 0) return;
-            const meta = groupMeta[status] || { label: status, color: 'border-gray-300 bg-gray-50', badge: 'bg-gray-100 text-gray-700' };
-
-            html += `
-            <div class="border-2 ${meta.color} rounded-xl p-4">
-              <div class="flex items-center justify-between mb-3">
-                <h3 class="font-bold text-gray-700 flex items-center gap-2 text-sm sm:text-base">
-                  🔐 รอลงนาม: <span class="text-blue-700">${meta.label}</span>
-                </h3>
-                <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold ${meta.badge} whitespace-nowrap">${items.length} รายการ</span>
-              </div>
-              <div class="space-y-2">`;
-
-            items.forEach(doc => {
-                const purpose   = (doc.purpose   || 'เอกสารไปราชการ').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                const requester = (doc.requesterName || '-').replace(/&/g,'&amp;').replace(/</g,'&lt;');
-                const date      = doc.startDate || doc.date || '-';
-                const docId     = doc.id; // safeId — ไม่มี special chars
-                const docType   = _getApprovalManagedDocType(doc, status);
-                const docLabel  = _getApprovalDocTypeLabel(docType);
-                const needsCommandFirst = typeof memoRequiresCommandBeforeSaraban === 'function'
-                    && memoRequiresCommandBeforeSaraban(doc, status);
-                const escapedDocId = String(docId || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                const buttonDomId = `alm-btn-${String(docId || '').replace(/[^A-Za-z0-9_-]/g, '_')}`;
-                const typeBadgeCls = docType === 'dispatch'
-                    ? 'bg-rose-100 text-rose-700'
-                    : (docType === 'command' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700');
-
-                html += `
-                <div class="bg-white rounded-lg border border-gray-200 p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                  <div class="flex-1 min-w-0">
-                    <div class="flex flex-wrap items-center gap-2 mb-1">
-                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${typeBadgeCls}">${docLabel}</span>
-                      ${needsCommandFirst ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">ต้องสร้างคำสั่งก่อนส่งสารบรรณ</span>' : ''}
-                    </div>
-                    <p class="font-medium text-gray-800 text-sm truncate">${purpose}</p>
-                    <p class="text-xs text-gray-500 mt-0.5">ผู้ขอ: ${requester} &nbsp;|&nbsp; วันที่: ${date}</p>
-                  </div>
-                  <div class="flex flex-col sm:flex-row gap-1.5 flex-shrink-0">
-                    ${needsCommandFirst ? `
-                    <button
-                      onclick="openAdminGenerateCommand('${escapedDocId}')"
-                      class="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors whitespace-nowrap">
-                      📝 สร้างคำสั่งก่อน
-                    </button>` : `
-                    <button id="${buttonDomId}"
-                      onclick="adminGenerateLink(this, '${escapedDocId}', '${status}')"
-                      class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors">
-                      🔗 สร้างลิงก์ส่งให้
-                    </button>`}
-                    ${status !== 'waiting_admin_review' ? `<button
-                      onclick="adminSkipStep('${escapedDocId}', '${status}')"
-                      class="w-full sm:w-auto px-3 py-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-1 transition-colors whitespace-nowrap">
-                      ⏭️ ข้ามขั้นตอนนี้
-                    </button>` : ''}
-                  </div>
-                </div>`;
-            });
-
-            html += `</div></div>`;
-        });
-
-        container.innerHTML = html;
+        _renderApprovalLinkManagementDocs(container, allDocs);
 
     } catch (e) {
         console.error("loadApprovalLinkManagement error:", e);
+        const message = String(e?.message || e || '');
+        const isPermissionError = /Missing or insufficient permissions/i.test(message);
+        if (isPermissionError) {
+            try {
+                const fallbackDocs = await _loadApprovalDocsFromGasFallback();
+                _renderApprovalLinkManagementDocs(container, fallbackDocs, 'Google Sheets / GAS');
+                return;
+            } catch (fallbackError) {
+                console.error('loadApprovalLinkManagement fallback error:', fallbackError);
+            }
+        }
         const errP = document.createElement('p');
         errP.className = 'text-center text-red-500 py-8';
-        errP.textContent = '⚠️ เกิดข้อผิดพลาด: ' + e.message;
+        errP.textContent = '⚠️ เกิดข้อผิดพลาด: ' + message;
         container.innerHTML = '';
         container.appendChild(errP);
     }

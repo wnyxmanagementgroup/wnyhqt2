@@ -24,8 +24,8 @@ div#main-app > header,
 .info-section,
 .chart-container,
 div#requests-list > div,
-div#admin-requests-list > div,
-div#admin-memos-list > div {
+div#admin-requests-cards > div,
+div#admin-memos-cards > div {
     background-color: rgba(255, 255, 255, 0.95); /* Fallback */
     border: 1px solid rgba(255, 255, 255, 0.4);
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
@@ -52,8 +52,8 @@ div#admin-memos-list > div {
     .info-section,
     .chart-container,
     div#requests-list > div,
-    div#admin-requests-list > div,
-    div#admin-memos-list > div {
+    div#admin-requests-cards > div,
+    div#admin-memos-cards > div {
         background-color: rgba(255, 255, 255, 0.6) !important;
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
@@ -278,10 +278,10 @@ legend {
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 /* --- Hover Effects --- */
-div#requests-list > div, div#admin-requests-list > div {
+div#requests-list > div, div#admin-requests-cards > div {
     transition: all 0.2s ease-in-out;
 }
-div#requests-list > div:hover, div#admin-requests-list > div:hover {
+div#requests-list > div:hover, div#admin-requests-cards > div:hover {
     transform: translateY(-2px);
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* เงานุ่มขึ้น */
 }
@@ -835,8 +835,8 @@ div#main-app > header {
 
 /* Cards: clean white on light background */
 div#requests-list > div,
-div#admin-requests-list > div,
-div#admin-memos-list > div {
+div#admin-requests-cards > div,
+div#admin-memos-cards > div {
     border-radius: 12px !important;
     border: 1px solid rgba(186, 230, 253, 0.74) !important;
     background: var(--theme-surface) !important;
@@ -845,7 +845,7 @@ div#admin-memos-list > div {
     box-shadow: 0 10px 28px rgba(14, 165, 233, 0.08) !important;
 }
 div#requests-list > div:hover,
-div#admin-requests-list > div:hover {
+div#admin-requests-cards > div:hover {
     box-shadow: 0 6px 16px rgba(0,0,0,0.08) !important;
 }
 
@@ -1152,6 +1152,319 @@ div#admin-requests-list > div:hover {
 
 #admin-memos-view .data-table {
     min-width: 920px;
+}
+
+.admin-card-shell {
+    border: 1px solid #dbeafe;
+    border-radius: 1.5rem;
+    background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,250,252,0.92) 100%);
+    box-shadow: 0 16px 40px rgba(125, 211, 252, 0.12);
+    padding: 1rem;
+}
+
+.admin-card-shell--memo {
+    border-color: #fde68a;
+    box-shadow: 0 16px 40px rgba(251, 191, 36, 0.12);
+}
+
+.admin-list-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.35rem 0.25rem 1rem;
+}
+
+.admin-list-toolbar__check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.875rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #fdf2f8 0%, #e0f2fe 100%);
+    border: 1px solid #c7d2fe;
+    color: #1e3a8a;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.admin-list-toolbar__hint {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.86rem;
+    line-height: 1.5;
+}
+
+.admin-desktop-list {
+    display: block;
+}
+
+.admin-mobile-list {
+    display: none;
+}
+
+.admin-card-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+    align-items: stretch;
+}
+
+.admin-card-loading,
+.admin-card-empty {
+    grid-column: 1 / -1;
+    border-radius: 1.25rem;
+    border: 1px dashed #cbd5e1;
+    background: rgba(255, 255, 255, 0.8);
+    padding: 2rem 1.25rem;
+    text-align: center;
+}
+
+.admin-record-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(220px, 0.9fr) minmax(0, 1.6fr) minmax(250px, 0.95fr);
+    gap: 1rem;
+    align-items: stretch;
+    min-height: 100%;
+    border-radius: 1.35rem;
+    border: 1px solid #dbeafe;
+    background:
+        radial-gradient(circle at top right, rgba(244, 114, 182, 0.12), transparent 28%),
+        linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 14px 30px rgba(14, 165, 233, 0.08);
+    padding: 1rem;
+    overflow: hidden;
+}
+
+.admin-record-card::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: linear-gradient(180deg, #7dd3fc 0%, #f9a8d4 100%);
+    opacity: 0.9;
+}
+
+.admin-record-card.row-green {
+    border-color: #bbf7d0;
+    box-shadow: 0 14px 30px rgba(34, 197, 94, 0.1);
+}
+
+.admin-record-card.row-green::after {
+    background: linear-gradient(180deg, #4ade80 0%, #7dd3fc 100%);
+}
+
+.admin-record-card.row-blue {
+    border-color: #bfdbfe;
+}
+
+.admin-record-card.row-orange {
+    border-color: #fed7aa;
+}
+
+.admin-record-card.row-red {
+    border-color: #fecdd3;
+}
+
+.admin-record-card__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 0.75rem;
+}
+
+.admin-record-card__select {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: #475569;
+    font-size: 0.86rem;
+    font-weight: 600;
+}
+
+.admin-record-card__id {
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #2563eb;
+    line-height: 1.2;
+}
+
+.admin-record-card__subline {
+    margin-top: 0.3rem;
+    color: #64748b;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.admin-record-card__name {
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.45;
+}
+
+.admin-record-card__summary,
+.admin-record-card__details,
+.admin-record-card__side {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.admin-record-card__summary {
+    gap: 0.85rem;
+    padding-right: 0.25rem;
+}
+
+.admin-record-card__details {
+    gap: 0.9rem;
+}
+
+.admin-record-card__side {
+    gap: 0.85rem;
+    align-self: stretch;
+}
+
+.admin-record-card__meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.admin-record-card__meta--three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-record-card__field {
+    min-width: 0;
+    padding: 0.8rem 0.9rem;
+    border-radius: 1rem;
+    background: rgba(248, 250, 252, 0.95);
+    border: 1px solid #e2e8f0;
+}
+
+.admin-record-card__field--wide {
+    grid-column: 1 / -1;
+}
+
+.admin-record-card__field-label {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: #64748b;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.admin-record-card__field-value {
+    color: #0f172a;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    word-break: break-word;
+}
+
+.admin-record-card__field-value--muted {
+    color: #475569;
+}
+
+.admin-record-card__badges,
+.admin-record-card__files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.admin-record-card__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+    margin-top: auto;
+}
+
+.admin-record-card__actions .btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 42px;
+}
+
+.admin-record-card__actions .btn--full {
+    grid-column: 1 / -1;
+}
+
+.admin-record-card__delete {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: #e11d48;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.admin-record-card__delete:hover {
+    color: #be123c;
+}
+
+@media (max-width: 1080px) {
+    .admin-record-card {
+        grid-template-columns: 1fr;
+        gap: 0.85rem;
+    }
+
+    .admin-record-card__summary,
+    .admin-record-card__details,
+    .admin-record-card__side {
+        padding-right: 0;
+    }
+}
+
+@media (max-width: 767px) {
+    .admin-desktop-list {
+        display: none;
+    }
+
+    .admin-mobile-list {
+        display: block;
+    }
+
+    .admin-card-shell {
+        padding: 0.85rem;
+        border-radius: 1.2rem;
+    }
+
+    .admin-list-toolbar {
+        padding-bottom: 0.75rem;
+    }
+
+    .admin-list-toolbar__check {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .admin-record-card {
+        padding: 0.9rem;
+        gap: 0.85rem;
+        border-radius: 1.1rem;
+    }
+
+    .admin-record-card__top {
+        flex-direction: column;
+    }
+
+    .admin-record-card__meta,
+    .admin-record-card__meta--three,
+    .admin-record-card__actions {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-record-card__field {
+        padding: 0.75rem 0.8rem;
+    }
+
+    .admin-record-card__id {
+        font-size: 1.08rem;
+    }
 }
 
 .overflow-x-auto {

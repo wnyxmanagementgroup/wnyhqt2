@@ -1149,25 +1149,38 @@
                             </div>
                         </div>
 
-                        <div class="table-wrapper">
-                            <table class="data-table">
-                                <thead class="bg-purple-50">
-                                    <tr>
-                                        <th class="text-purple-700 w-8">
-                                            <input type="checkbox" id="bulk-select-all" class="rounded" title="เลือกทั้งหมด" onchange="toggleSelectAll(this)">
-                                        </th>
-                                        <th class="text-purple-700">เลขที่คำขอ</th>
-                                        <th class="text-purple-700">ชื่อผู้ขอ</th>
-                                        <th class="text-purple-700">เรื่อง / สถานที่</th>
-                                        <th class="text-purple-700">วันที่เดินทาง</th>
-                                        <th class="text-purple-700 text-center">คน</th>
-                                        <th class="text-purple-700 text-center">งบ</th>
-                                        <th class="text-purple-700">สถานะ / ไฟล์</th>
-                                        <th class="text-purple-700 text-center">ดำเนินการ</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="admin-requests-list"></tbody>
-                            </table>
+                        <div class="admin-desktop-list">
+                            <div class="table-wrapper">
+                                <table class="data-table">
+                                    <thead class="bg-purple-50">
+                                        <tr>
+                                            <th class="text-purple-700 w-8">
+                                                <input type="checkbox" id="bulk-select-all-desktop" class="rounded" title="เลือกทั้งหมด" onchange="toggleSelectAll(this)">
+                                            </th>
+                                            <th class="text-purple-700">เลขที่คำขอ</th>
+                                            <th class="text-purple-700">ชื่อผู้ขอ</th>
+                                            <th class="text-purple-700">เรื่อง / สถานที่</th>
+                                            <th class="text-purple-700">วันที่เดินทาง</th>
+                                            <th class="text-purple-700 text-center">คน</th>
+                                            <th class="text-purple-700 text-center">งบ</th>
+                                            <th class="text-purple-700">สถานะ / ไฟล์</th>
+                                            <th class="text-purple-700 text-center">ดำเนินการ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="admin-requests-table-list"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="admin-mobile-list admin-card-shell">
+                            <div class="admin-list-toolbar">
+                                <label class="admin-list-toolbar__check">
+                                    <input type="checkbox" id="bulk-select-all-mobile" class="rounded" title="เลือกทั้งหมด" onchange="toggleSelectAll(this)">
+                                    <span>เลือกทั้งหมด</span>
+                                </label>
+                                <p class="admin-list-toolbar__hint">การ์ดแต่ละใบจะแสดงผู้ขอ เรื่อง สถานที่ วันที่ สถานะ ไฟล์ และปุ่มจัดการครบในที่เดียว</p>
+                            </div>
+                            <div id="admin-requests-cards" class="admin-card-list"></div>
                         </div>
                     </div>
 
@@ -1185,27 +1198,41 @@
                             <input type="text" id="admin-search-memos" class="form-input flex-1"
                                 placeholder="🔍 ค้นหาบันทึก (ชื่อ / เรื่อง / เลขที่)...">
                         </div>
-                        <div class="table-wrapper">
-                            <table class="data-table">
-                                <thead class="bg-orange-50">
-                                    <tr>
-                                        <th class="text-orange-700 text-center w-10">#</th>
-                                        <th class="text-orange-700">เลขที่บันทึก</th>
-                                        <th class="text-orange-700">ชื่อผู้ขอ</th>
-                                        <th class="text-orange-700">เรื่อง / สถานที่</th>
-                                        <th class="text-orange-700">วันที่</th>
-                                        <th class="text-orange-700">สถานะ</th>
-                                        <th class="text-orange-700">ไฟล์</th>
-                                        <th class="text-orange-700 text-center">ดำเนินการ</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="admin-memos-list">
-                                    <tr><td colspan="8" class="text-center py-8">
-                                        <div class="loader mx-auto mb-2"></div>
-                                        <p class="text-gray-400">กำลังโหลดข้อมูล...</p>
-                                    </td></tr>
-                                </tbody>
-                            </table>
+                        <div class="admin-desktop-list">
+                            <div class="table-wrapper">
+                                <table class="data-table">
+                                    <thead class="bg-orange-50">
+                                        <tr>
+                                            <th class="text-orange-700 text-center w-10">#</th>
+                                            <th class="text-orange-700">เลขที่บันทึก</th>
+                                            <th class="text-orange-700">ชื่อผู้ขอ</th>
+                                            <th class="text-orange-700">เรื่อง / สถานที่</th>
+                                            <th class="text-orange-700">วันที่</th>
+                                            <th class="text-orange-700">สถานะ</th>
+                                            <th class="text-orange-700">ไฟล์</th>
+                                            <th class="text-orange-700 text-center">ดำเนินการ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="admin-memos-table-list">
+                                        <tr><td colspan="8" class="text-center py-8">
+                                            <div class="loader mx-auto mb-2"></div>
+                                            <p class="text-gray-400">กำลังโหลดข้อมูล...</p>
+                                        </td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div class="admin-mobile-list admin-card-shell admin-card-shell--memo">
+                            <div class="admin-list-toolbar">
+                                <p class="admin-list-toolbar__hint">แสดงเลขที่บันทึก ผู้ขอ เรื่อง สถานที่ วันที่ สถานะ ไฟล์ และปุ่มดำเนินการในรูปแบบการ์ดที่เลื่อนดูได้ง่ายบนทุกหน้าจอ</p>
+                            </div>
+                            <div id="admin-memos-cards" class="admin-card-list admin-card-list--memo">
+                                <div class="admin-card-loading">
+                                    <div class="loader mx-auto mb-2"></div>
+                                    <p class="text-gray-400">กำลังโหลดข้อมูล...</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 	                </div>
