@@ -1537,6 +1537,21 @@ function getSignedPackageEntries(record = {}) {
     return entries;
 }
 
+function getAdminUploadedMemoFiles(record = {}) {
+    const files = [];
+    const pushFile = (key, label, url, className) => {
+        if (!url || files.some(item => item.url === url)) return;
+        files.push({ key, label, url, className });
+    };
+
+    // แสดงเฉพาะไฟล์ที่แอดมินอัปโหลดเอง ไม่รวมไฟล์ที่ระบบ generate / archive อัตโนมัติ
+    pushFile('adminMemo', '📄 บันทึก', record.adminMemoUrl, 'bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200');
+    pushFile('command', '📋 คำสั่ง', record.completedCommandUrl, 'bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200');
+    pushFile('dispatch', '📦 หนังสือส่ง', record.dispatchBookUrl, 'bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200');
+
+    return files;
+}
+
 function decodeBase64ToArrayBuffer(base64) {
     const bin = window.atob(base64);
     const bytes = new Uint8Array(bin.length);
@@ -1637,7 +1652,8 @@ function renderAdminMemosList(memos) {
     const cardItems = [];
 
     memos.forEach((memo, idx) => {
-        const hasCompletedFiles = memo.completedMemoUrl || memo.adminMemoUrl || memo.completedCommandUrl || memo.completedDispatchBookUrl || memo.dispatchBookUrl;
+        const adminUploadedFiles = getAdminUploadedMemoFiles(memo);
+        const hasCompletedFiles = adminUploadedFiles.length > 0;
         const hasCommand = !!memo.completedCommandUrl || !!memo.commandPdfUrl;
         const signedPackageEntries = getSignedPackageEntries(memo);
         const canMergePackage = signedPackageEntries.length >= 2;
@@ -1662,14 +1678,9 @@ function renderAdminMemosList(memos) {
             ? 'bg-green-100 text-green-700'
             : (memo.status === 'ไม่อนุมัติ' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700');
 
-        const latestPdfUrl = memo.currentPdfUrl || memo.pdfUrl || memo.memoPdfUrl;
-        const fileLinks = [
-            latestPdfUrl ? `<a href="${latestPdfUrl}" target="_blank" class="btn btn-xs bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200">🖨️ PDF</a>` : '',
-            memo.completedMemoUrl ? `<a href="${memo.completedMemoUrl}" target="_blank" class="btn btn-xs bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200">📎 ต้นทาง</a>` : '',
-            memo.adminMemoUrl ? `<a href="${memo.adminMemoUrl}" target="_blank" class="btn btn-xs bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200">📄 บันทึก</a>` : '',
-            (memo.completedCommandUrl || memo.commandPdfUrl) ? `<a href="${memo.completedCommandUrl || memo.commandPdfUrl}" target="_blank" class="btn btn-xs bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200">📋 คำสั่ง</a>` : '',
-            (memo.completedDispatchBookUrl || memo.dispatchBookUrl || memo.dispatchBookPdfUrl) ? `<a href="${memo.completedDispatchBookUrl || memo.dispatchBookUrl || memo.dispatchBookPdfUrl}" target="_blank" class="btn btn-xs bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200">📦 หนังสือส่ง</a>` : '',
-        ].filter(Boolean).join('');
+        const fileLinks = adminUploadedFiles
+            .map(file => `<a href="${file.url}" target="_blank" class="btn btn-xs ${file.className}">${file.label}</a>`)
+            .join('');
 
         const rowClass = hasCommand ? 'row-green' : (hasCompletedFiles ? 'row-blue' : '');
         const cardHtml = `
