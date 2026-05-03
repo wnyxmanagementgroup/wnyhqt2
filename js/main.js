@@ -39,6 +39,14 @@ const PAGE_TITLES = {
 const MOBILE_SIDEBAR_BREAKPOINT = 1024;
 const MOBILE_EDGE_SWIPE_ZONE = 28;
 const MOBILE_EDGE_SWIPE_TRIGGER = 72;
+const ROLE_RESTRICTED_PAGES = ['dashboard-page', 'form-page', 'send-memo-page'];
+
+function getRoleBasedFallbackPage(user) {
+    if (!user) return null;
+    if (user.role === 'admin') return 'command-generation-page';
+    if (user.role === 'director') return 'approval-page';
+    return null;
+}
 
 function isMobileSidebarViewport() {
     return window.innerWidth <= MOBILE_SIDEBAR_BREAKPOINT;
@@ -164,6 +172,14 @@ window.addEventListener('resize', () => {
 
 async function switchPage(targetPageId) {
     console.log("🔄 Switching to page:", targetPageId);
+
+    const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+    if (currentUser && ROLE_RESTRICTED_PAGES.includes(targetPageId) && ['admin', 'director'].includes(currentUser.role)) {
+        const fallbackPage = getRoleBasedFallbackPage(currentUser);
+        if (fallbackPage && fallbackPage !== targetPageId) {
+            return switchPage(fallbackPage);
+        }
+    }
 
     // Hide all pages
     document.querySelectorAll('.page-view').forEach(page => { page.classList.add('hidden'); });

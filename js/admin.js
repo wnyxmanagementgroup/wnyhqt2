@@ -1,5 +1,8 @@
 // --- ADMIN FUNCTIONS ---
 
+let adminRequestsLoadPromise = null;
+let adminRequestsCacheYear = null;
+
 // ตรวจสอบสิทธิ์ Admin (Client-side check)
 function checkAdminAccess() {
     const user = getCurrentUser();
@@ -10,6 +13,129 @@ function checkAdminAccess() {
     return true;
 }
 
+function getSelectedAdminYear() {
+    const yearSelect = document.getElementById('admin-year-select');
+    const currentYear = new Date().getFullYear() + 543;
+    return yearSelect ? parseInt(yearSelect.value, 10) : currentYear;
+}
+
+async function loadAdminRequestsData({ force = false } = {}) {
+    if (!checkAdminAccess()) return [];
+
+    const selectedYear = getSelectedAdminYear();
+    const hasFreshCache = !force && Array.isArray(allRequestsCache) && allRequestsCache.length && adminRequestsCacheYear === selectedYear;
+    if (hasFreshCache) return allRequestsCache;
+
+    if (!force && adminRequestsLoadPromise && adminRequestsCacheYear === selectedYear) {
+        return adminRequestsLoadPromise;
+    }
+
+    adminRequestsCacheYear = selectedYear;
+    adminRequestsLoadPromise = (async () => {
+        if (typeof ensureFirebaseAuth === 'function') {
+            await ensureFirebaseAuth();
+        }
+
+        const firestorePromise = (typeof db !== 'undefined')
+            ? db.collection('requests').get().catch(firestoreError => {
+                console.warn('⚠️ Firestore enrich skipped in admin loader:', firestoreError?.message || firestoreError);
+                return null;
+            })
+            : Promise.resolve(null);
+
+        const [gasResult, fbSnapshot] = await Promise.all([
+            apiCall('GET', 'getAllRequests'),
+            firestorePromise
+        ]);
+
+        if (gasResult.status !== 'success') {
+            throw new Error(gasResult.message || 'ไม่สามารถดึงข้อมูลจาก Google Sheets ได้');
+        }
+
+        let requests = (gasResult.data || []).filter(req => {
+            if (!req.id && !req.docDate) return false;
+            const idYear = req.id ? parseInt(req.id.split('/')[1], 10) : 0;
+            if (idYear === selectedYear) return true;
+            if (req.docDate) return new Date(req.docDate).getFullYear() + 543 === selectedYear;
+            return false;
+        });
+
+        if (fbSnapshot) {
+            const fbMap = {};
+            fbSnapshot.forEach(doc => {
+                const data = doc.data() || {};
+                fbMap[doc.id] = data;
+                if (data.id) fbMap[data.id] = data;
+            });
+
+            requests = requests.map(req => {
+                const rawId = req.id || req.requestId || '';
+                const safeId = rawId.replace(/[\/\\:\.]/g, '-');
+                const fb = fbMap[safeId] || fbMap[rawId] || {};
+
+                return {
+                    ...req,
+                    username: req.username || fb.username || fb.createdby || '',
+                    requesterName: req.requesterName || fb.requesterName || fb.name || req.username || fb.username || '',
+                    requesterPosition: req.requesterPosition || fb.requesterPosition || '',
+                    purpose: req.purpose || fb.purpose || fb.subject || '',
+                    location: req.location || fb.location || '',
+                    province: req.province || fb.province || '',
+                    docDate: req.docDate || fb.docDate || '',
+                    startDate: req.startDate || fb.startDate || fb.dateStart || '',
+                    endDate: req.endDate || fb.endDate || fb.dateEnd || '',
+                    expenseOption: req.expenseOption || fb.expenseOption || '',
+                    totalExpense: req.totalExpense || fb.totalExpense || '',
+                    commandPdfUrl: req.commandPdfUrl || fb.commandPdfUrl || '',
+                    completedMemoUrl: req.completedMemoUrl || fb.completedMemoUrl || '',
+                    dispatchBookUrl: req.dispatchBookUrl || fb.dispatchBookPdfUrl || fb.dispatchBookUrl || '',
+                    dispatchBookPdfUrl: req.dispatchBookPdfUrl || fb.dispatchBookUrl || fb.dispatchBookPdfUrl || '',
+                    status: req.status || fb.status || '',
+                    docStatus: req.docStatus || fb.docStatus || '',
+                    attendees: req.attendees || fb.attendees || [],
+                    attendeeCount: req.attendeeCount || fb.attendeeCount || 0,
+                    travelSchedule: fb.travelSchedule || req.travelSchedule || null,
+                    travelSchedulePdfUrl: fb.travelSchedulePdfUrl || req.travelSchedulePdfUrl || '',
+                    travelScheduleStatus: fb.travelScheduleStatus || req.travelScheduleStatus || '',
+                    timestamp: req.timestamp || fb.timestamp || '',
+                };
+            });
+        }
+
+        requests.sort((a, b) => {
+            const parseId = (id) => {
+                if (!id) return 0;
+                try {
+                    const parts = id.split('/');
+                    return parseInt(parts[0].replace(/\D/g, ''), 10) || 0;
+                } catch (e) {
+                    return 0;
+                }
+            };
+
+            const idNumA = parseId(a.id);
+            const idNumB = parseId(b.id);
+            if (idNumA !== idNumB) return idNumB - idNumA;
+
+            const getTime = (val) => {
+                if (!val) return 0;
+                if (val.seconds) return val.seconds * 1000;
+                return new Date(val).getTime();
+            };
+            return getTime(b.timestamp || b.docDate) - getTime(a.timestamp || a.docDate);
+        });
+
+        allRequestsCache = requests;
+        return requests;
+    })();
+
+    try {
+        return await adminRequestsLoadPromise;
+    } finally {
+        adminRequestsLoadPromise = null;
+    }
+}
+
 // --- FETCH DATA ---
 // --- แก้ไข: ดึงข้อมูลเนื้อหาจาก Google Sheet เป็นหลัก 100% ---
 // --- แก้ไข: เรียงลำดับจาก เลขที่เอกสาร (ล่าสุดขึ้นก่อน) และกรองปีงบประมาณ ---
@@ -17,10 +143,8 @@ function checkAdminAccess() {
 // ดึงข้อมูลคำขอทั้งหมด (สำหรับหน้าออกคำสั่ง) โดยผสานข้อมูลจาก Google Sheets และ Firestore
 async function fetchAllRequestsForCommand() {
     try {
-        // 1. ตรวจสอบสิทธิ์ Admin เบื้องต้น (Client-side)
         if (!checkAdminAccess()) return;
         
-        // 2. แสดง Loader
         const container = isCompactAdminCardView()
             ? document.getElementById('admin-requests-cards')
             : document.getElementById('admin-requests-table-list');
@@ -29,124 +153,7 @@ async function fetchAllRequestsForCommand() {
                 ? `<div class="admin-card-loading"><span class="loader"></span><p class="text-gray-500 animate-pulse mt-2">กำลังโหลดข้อมูลคำขอทั้งหมด...</p></div>`
                 : `<tr><td colspan="9" class="text-center py-12"><div class="flex flex-col items-center justify-center gap-2"><span class="loader"></span><p class="text-gray-500 animate-pulse mt-2">กำลังโหลดข้อมูลคำขอทั้งหมด...</p></div></td></tr>`;
         }
-
-        // 3. ★★★ รอให้ Firebase Auth พร้อมใช้งาน (แก้ปัญหา Rules Block) ★★★
-        if (typeof firebase !== 'undefined' && !firebase.auth().currentUser) {
-            console.warn("⏳ Waiting for Firebase Auth...");
-            await new Promise(resolve => {
-                const unsubscribe = firebase.auth().onAuthStateChanged(user => {
-                    unsubscribe();
-                    resolve(user);
-                });
-            });
-            
-            // ถ้าจังหวะนี้ยังไม่มี User แปลว่าไม่ได้ล็อกอินจริง -> ดีดออก
-            if (!firebase.auth().currentUser) {
-                console.error("❌ Admin not logged in (Firebase)");
-                showAlert('แจ้งเตือน', 'กรุณาเข้าสู่ระบบใหม่');
-                return;
-            }
-        }
-
-        // 4. ดึงปีงบประมาณที่เลือกจาก Dropdown
-        const yearSelect = document.getElementById('admin-year-select');
-        const currentYear = new Date().getFullYear() + 543;
-        const selectedYear = yearSelect ? parseInt(yearSelect.value) : currentYear;
-        
-        console.log(`📥 Fetching admin requests for year: ${selectedYear}`);
-
-        // ── 5. ดึงข้อมูลจาก GAS Sheets (source of truth) ──
-        const gasResult = await apiCall('GET', 'getAllRequests');
-        if (gasResult.status !== 'success') {
-            throw new Error(gasResult.message || 'ไม่สามารถดึงข้อมูลจาก Google Sheets ได้');
-        }
-        let requests = (gasResult.data || []).filter(req => {
-            if (!req.id && !req.docDate) return false;
-            const idYear = req.id ? parseInt(req.id.split('/')[1]) : 0;
-            if (idYear === selectedYear) return true;
-            if (req.docDate) return new Date(req.docDate).getFullYear() + 543 === selectedYear;
-            return false;
-        });
-        console.log(`📋 Admin loaded ${requests.length} requests from GAS Sheets`);
-
-        // 6.5 ผสานข้อมูลจาก Firestore เพิ่มเติมเพื่ออุด field ที่อาจว่างใน Google Sheets
-        if (typeof db !== 'undefined') {
-            try {
-                const fbSnapshot = await db.collection('requests').get();
-                const fbMap = {};
-
-                fbSnapshot.forEach(doc => {
-                    const data = doc.data() || {};
-                    fbMap[doc.id] = data;
-                    if (data.id) fbMap[data.id] = data;
-                });
-
-                requests = requests.map(req => {
-                    const rawId = req.id || req.requestId || '';
-                    const safeId = rawId.replace(/[\/\\:\.]/g, '-');
-                    const fb = fbMap[safeId] || fbMap[rawId] || {};
-
-                    return {
-                        ...req,
-                        username: req.username || fb.username || fb.createdby || '',
-                        requesterName: req.requesterName || fb.requesterName || fb.name || req.username || fb.username || '',
-                        requesterPosition: req.requesterPosition || fb.requesterPosition || '',
-                        purpose: req.purpose || fb.purpose || fb.subject || '',
-                        location: req.location || fb.location || '',
-                        province: req.province || fb.province || '',
-                        docDate: req.docDate || fb.docDate || '',
-                        startDate: req.startDate || fb.startDate || fb.dateStart || '',
-                        endDate: req.endDate || fb.endDate || fb.dateEnd || '',
-                        expenseOption: req.expenseOption || fb.expenseOption || '',
-                        totalExpense: req.totalExpense || fb.totalExpense || '',
-                        commandPdfUrl: req.commandPdfUrl || fb.commandPdfUrl || '',
-                        completedMemoUrl: req.completedMemoUrl || fb.completedMemoUrl || '',
-                        dispatchBookUrl: req.dispatchBookUrl || fb.dispatchBookUrl || fb.dispatchBookPdfUrl || '',
-                        dispatchBookPdfUrl: req.dispatchBookPdfUrl || fb.dispatchBookPdfUrl || fb.dispatchBookUrl || '',
-                        status: req.status || fb.status || '',
-                        docStatus: req.docStatus || fb.docStatus || '',
-                        attendees: req.attendees || fb.attendees || [],
-                        attendeeCount: req.attendeeCount || fb.attendeeCount || 0,
-                        travelSchedule: fb.travelSchedule || req.travelSchedule || null,
-                        travelSchedulePdfUrl: fb.travelSchedulePdfUrl || req.travelSchedulePdfUrl || '',
-                        travelScheduleStatus: fb.travelScheduleStatus || req.travelScheduleStatus || '',
-                        timestamp: req.timestamp || fb.timestamp || '',
-                    };
-                });
-            } catch (firestoreError) {
-                console.warn('⚠️ Firestore enrich skipped in fetchAllRequestsForCommand:', firestoreError?.message || firestoreError);
-            }
-        }
-
-        // 8. เรียงลำดับ (Sort): เลขที่เอกสารมาก -> น้อย (ล่าสุดขึ้นก่อน)
-        requests.sort((a, b) => {
-            const parseId = (id) => {
-                if (!id) return 0;
-                try {
-                    // แยกเลขหน้าเครื่องหมาย / (เช่น "บค005/2569" -> 5)
-                    const parts = id.split('/');
-                    const numberPart = parseInt(parts[0].replace(/\D/g, '')) || 0;
-                    return numberPart;
-                } catch (e) { return 0; }
-            };
-
-            const idNumA = parseId(a.id);
-            const idNumB = parseId(b.id);
-
-            if (idNumA !== idNumB) return idNumB - idNumA; // เลขมากขึ้นก่อน
-
-            // ถ้าเลขเท่ากัน หรือไม่มีเลข ให้ใช้วันที่
-            const getTime = (val) => {
-                if (!val) return 0;
-                if (val.seconds) return val.seconds * 1000; // Firestore Timestamp
-                return new Date(val).getTime();
-            };
-            return getTime(b.timestamp || b.docDate) - getTime(a.timestamp || a.docDate);
-        });
-
-        console.log(`✅ Loaded ${requests.length} admin requests.`);
-
-        // 9. อัปเดต Cache และแสดงผล
+        const requests = await loadAdminRequestsData();
         allRequestsCache = requests; 
         renderAdminRequestsList(requests);
 
@@ -170,6 +177,12 @@ async function fetchAllMemos() {
         if (typeof ensureFirebaseAuth === 'function') await ensureFirebaseAuth();
 
         const result = await apiCall('GET', 'getAllMemos');
+        let requestRecords = [];
+        try {
+            requestRecords = await loadAdminRequestsData();
+        } catch (requestError) {
+            console.warn('⚠️ Request enrich skipped in fetchAllMemos:', requestError?.message || requestError);
+        }
         let fbSnapshot = null;
         if (typeof db !== 'undefined') {
             try {
@@ -188,36 +201,55 @@ async function fetchAllMemos() {
             // สร้าง lookup map จาก Firestore: safeId → data
             // (refNumber ของ memo เช่น "บค071/2569" ตรงกับ doc.id ใน Firestore)
             const fbMap = {};
+            const requestMap = {};
+            const addLookup = (map, key, value) => {
+                if (!key || map[key]) return;
+                map[key] = value;
+            };
+
             if (fbSnapshot) {
                 fbSnapshot.forEach(doc => {
-                    const data = doc.data();
-                    fbMap[doc.id] = data;                       // key: safeId  (บค071-2569)
-                    if (data.id) fbMap[data.id] = data;        // key: original (บค071/2569)
+                    const data = doc.data() || {};
+                    addLookup(fbMap, doc.id, data);                       // key: safeId  (บค071-2569)
+                    addLookup(fbMap, data.id, data);                      // key: original (บค071/2569)
+                    addLookup(fbMap, data.requestId, data);
+                    addLookup(fbMap, (data.id || '').replace(/[\/\\:\.]/g, '-'), data);
                 });
             }
 
+            requestRecords.forEach(req => {
+                addLookup(requestMap, req.id, req);
+                addLookup(requestMap, req.requestId, req);
+                addLookup(requestMap, (req.id || '').replace(/[\/\\:\.]/g, '-'), req);
+                addLookup(requestMap, (req.requestId || '').replace(/[\/\\:\.]/g, '-'), req);
+            });
+
             // Merge ข้อมูลจาก Firestore เข้าไปใน memo แต่ละรายการ
             memos = memos.map(memo => {
-                const refRaw  = memo.refNumber || memo.requestId || '';
+                const refRaw  = memo.refNumber || memo.requestId || memo.id || '';
                 const refSafe = refRaw.replace(/[\/\\:\.]/g, '-');
-                const fb      = fbMap[refSafe] || fbMap[refRaw] || {};
+                const fb      = fbMap[refSafe] || fbMap[refRaw] || fbMap[memo.id] || {};
+                const req     = requestMap[refSafe] || requestMap[refRaw] || requestMap[memo.id] || {};
 
                 return {
                     ...memo,
                     // ฟิลด์ที่ API อาจไม่ส่งมา → เอาจาก Firestore แทน
-                    purpose:          memo.purpose          || fb.purpose          || fb.subject       || '',
-                    requesterName:    memo.requesterName    || fb.requesterName    || memo.submittedBy || '',
-                    location:         memo.location         || fb.location         || '',
-                    province:         memo.province         || fb.province         || '',
-                    docDate:          memo.docDate          || fb.docDate          || '',
-                    startDate:        memo.startDate        || fb.startDate        || '',
-                    endDate:          memo.endDate          || fb.endDate          || '',
-                    attendees:        memo.attendees        || fb.attendees        || [],
-                    commandPdfUrl:    memo.commandPdfUrl    || fb.commandPdfUrl    || '',
-                    docStatus:        memo.docStatus        || fb.docStatus        || '',
+                    purpose:          memo.purpose          || fb.purpose          || req.purpose          || fb.subject       || req.subject || '',
+                    requesterName:    memo.requesterName    || fb.requesterName    || req.requesterName    || fb.name          || req.name || memo.submittedBy || '',
+                    location:         memo.location         || fb.location         || req.location         || '',
+                    province:         memo.province         || fb.province         || req.province         || '',
+                    docDate:          memo.docDate          || fb.docDate          || req.docDate          || '',
+                    startDate:        memo.startDate        || fb.startDate        || req.startDate        || '',
+                    endDate:          memo.endDate          || fb.endDate          || req.endDate          || '',
+                    attendees:        memo.attendees        || fb.attendees        || req.attendees        || [],
+                    commandPdfUrl:    memo.commandPdfUrl    || fb.commandPdfUrl    || req.commandPdfUrl    || '',
+                    docStatus:        memo.docStatus        || fb.docStatus        || req.docStatus        || '',
                     // ★ ไฟล์ URL — ดึงจาก Firestore ก่อน (real-time) แล้วค่อย fallback ไป Sheet
                     completedMemoUrl: fb.completedMemoUrl   || memo.completedMemoUrl || '',  // ไฟล์ที่ผู้ใช้ส่งมา (ต้นทาง)
                     adminMemoUrl:     fb.adminMemoUrl        || memo.adminMemoUrl     || '',  // ★ ไฟล์ที่แอดมินอัพโหลด (บันทึก)
+                    completedCommandUrl: fb.completedCommandUrl || memo.completedCommandUrl || '',
+                    dispatchBookUrl:  fb.dispatchBookUrl     || memo.dispatchBookUrl  || '',
+                    completedDispatchBookUrl: fb.completedDispatchBookUrl || memo.completedDispatchBookUrl || '',
                     pdfUrl:           fb.pdfUrl             || fb.fileUrl           || memo.pdfUrl       || '',
                     fileUrl:          fb.fileUrl            || fb.pdfUrl            || memo.fileUrl      || '',
                     memoPdfUrl:       fb.memoPdfUrl         || memo.memoPdfUrl      || '',
@@ -1544,7 +1576,9 @@ function getAdminUploadedMemoFiles(record = {}) {
         files.push({ key, label, url, className });
     };
 
-    // แสดงเฉพาะไฟล์ที่แอดมินอัปโหลดเอง ไม่รวมไฟล์ที่ระบบ generate / archive อัตโนมัติ
+    // แสดงเฉพาะไฟล์ที่แอดมินอัปโหลดเองสำหรับ flow บันทึกข้อความ
+    // completedCommandUrl = ไฟล์คำสั่งที่แอดมินอัปโหลดใน modal นี้
+    // commandPdfUrl      = ไฟล์คำสั่งที่ระบบสร้างอัตโนมัติ ไม่แสดงในตารางนี้
     pushFile('adminMemo', '📄 บันทึก', record.adminMemoUrl, 'bg-blue-100 text-blue-700 border border-blue-300 hover:bg-blue-200');
     pushFile('command', '📋 คำสั่ง', record.completedCommandUrl, 'bg-indigo-100 text-indigo-700 border border-indigo-300 hover:bg-indigo-200');
     pushFile('dispatch', '📦 หนังสือส่ง', record.dispatchBookUrl, 'bg-purple-100 text-purple-700 border border-purple-300 hover:bg-purple-200');
@@ -2772,16 +2806,11 @@ async function loadAdminDashboard() {
 
     _setAdminDashboardLoading();
 
-    // ใช้ cache ถ้ามีอยู่แล้ว ไม่ต้องดึงใหม่
-    let requests = allRequestsCache || [];
-    if (!requests.length) {
-        try {
-            const res = await apiCall('GET', 'getAllRequests');
-            requests = res.status === 'success' ? (res.data || []) : [];
-            allRequestsCache = requests;
-        } catch (e) {
-            console.warn('Dashboard: failed to load requests', e.message);
-        }
+    let requests = [];
+    try {
+        requests = await loadAdminRequestsData();
+    } catch (e) {
+        console.warn('Dashboard: failed to load requests', e.message);
     }
 
     _renderKpiCards(requests);
@@ -2913,7 +2942,7 @@ function _renderRecentList(requests) {
         return `<div class="flex items-center justify-between gap-2 py-1.5 border-b border-gray-100 last:border-0 rounded-lg px-2 hover:bg-indigo-50 cursor-pointer transition" onclick="filterByStatus('${safeId}');switchAdminTab('requests');" title="คลิกเพื่อดูรายการ">
             <div>
                 <span class="font-bold text-indigo-600">${safeId}</span>
-                <span class="text-gray-500 ml-1 text-xs">${escapeHtml((r.requesterName || '').substring(0,16))}</span>
+                <span class="text-gray-500 ml-1 text-xs">${escapeHtml(r.requesterName || '')}</span>
             </div>
             <span class="text-xs px-2 py-0.5 rounded-full ${r.status === 'เสร็จสิ้น' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}">${escapeHtml(r.status || '—')}</span>
         </div>`;

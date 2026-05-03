@@ -152,6 +152,8 @@ async function initializeUserSession(user) {
     const archiveLinkBtn        = document.getElementById('archive-link-btn');
     const adminSectionLabel     = document.getElementById('admin-section-label');
     const isAdmin = String(user.role).toLowerCase() === 'admin';
+    const isDirector = String(user.role).toLowerCase() === 'director';
+    const restrictedUserMenuIds = ['user-nav-dashboard', 'user-nav-form', 'nav-send-memo'];
 
     if (isAdmin) {
         if (adminBtnCommand)       adminBtnCommand.classList.remove('hidden');
@@ -177,6 +179,12 @@ async function initializeUserSession(user) {
         if (adminSectionLabel)     adminSectionLabel.classList.add('hidden');
     }
 
+    restrictedUserMenuIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.toggle('hidden', isAdmin || isDirector);
+    });
+
     // 4. เมนู "เอกสารรอลงนาม" — แสดงทันทีถ้า role บ่งบอกว่าเป็นผู้อนุมัติ
     const hasApproverRole = !isAdmin && user.role && (
         user.role.startsWith('head_') ||
@@ -186,7 +194,10 @@ async function initializeUserSession(user) {
     );
     if (isAdmin || hasApproverRole) {
         const inboxNav = document.getElementById('nav-approval-inbox');
-        if (inboxNav) inboxNav.style.display = '';
+        if (inboxNav) {
+            inboxNav.classList.remove('hidden');
+            inboxNav.style.display = '';
+        }
         if (typeof refreshApprovalInboxBadge === 'function') refreshApprovalInboxBadge();
     }
 
@@ -196,7 +207,7 @@ async function initializeUserSession(user) {
         const hideMenus = ['user-nav-dashboard', 'user-nav-form', 'nav-send-memo', 'nav-stats'];
         hideMenus.forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.style.display = 'none';
+            if (el) el.classList.add('hidden');
         });
         // ปรับสไตล์ปุ่ม Inbox ให้เข้ากับ grid layout เหมือนปุ่มอื่น
         const inboxNav = document.getElementById('nav-approval-inbox');
